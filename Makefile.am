@@ -1,0 +1,1 @@
+SUBDIRS = adc_test btc08_test
