@@ -10,6 +10,7 @@
 #include <linux/spi/spidev.h>
 
 #include "Spi.h"
+#include "Utils.h"
 
 // #define NX_DBG_OFF
 #ifdef NX_DTAG
@@ -127,6 +128,7 @@ int SpiTransfer( SPI_HANDLE handle, uint8_t *tx, uint8_t *rx, int32_t txLen, int
 {
 	int ret;
 	struct spi_ioc_transfer tr;
+	int len = ALIGN((txLen+rxLen), 4);
 
 	if( !handle )
 		return -1;
@@ -136,7 +138,7 @@ int SpiTransfer( SPI_HANDLE handle, uint8_t *tx, uint8_t *rx, int32_t txLen, int
 	memset( &tr, 0, sizeof(tr) );
 	tr.tx_buf        = (unsigned long)tx,	// Buffer for transmit data.
 	tr.rx_buf        = (unsigned long)rx,	// Buffer for receive data.
-	tr.len           = txLen + rxLen;		// Length of receive and transmit buffers in bytes.
+	tr.len           = len;					// Length of receive and transmit buffers in bytes.
 	tr.delay_usecs   = handle->delay;		// Sets the delay after a transfer before the chip select status is changed and
 											// the next transfer is triggered
 	tr.speed_hz      = handle->speed;		// Sets the bit-rate of the device
@@ -171,10 +173,12 @@ int SpiTransfer( SPI_HANDLE handle, uint8_t *tx, uint8_t *rx, int32_t txLen, int
 	}
 
 	//	1's complement
-	for( int i=0 ; i<txLen+rxLen ; i++ )
+	for( int i=0 ; i<len ; i++ )
 	{
 		rx[i] = rx[i] ^ 0xFF;
 	}
+
+	// HexDump(__FUNCTION__, rx, len);
 
 	pthread_mutex_unlock( &handle->lock );
 

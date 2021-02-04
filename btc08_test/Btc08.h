@@ -36,7 +36,7 @@ int Btc08ResetHW     (BTC08_HANDLE handle);
 int	Btc08ReadId      (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08AutoAddress (BTC08_HANDLE handle);
 int Btc08RunBist     (BTC08_HANDLE handle, uint8_t *hash, uint8_t *hash2, uint8_t *hash3, uint8_t *hash4);
-int Btc08ReadBist    (BTC08_HANDLE handle, uint8_t chipId);
+uint8_t * Btc08ReadBist    (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08Reset       (BTC08_HANDLE handle);			//	S/W Reset
 int Btc08SetPllConfig(BTC08_HANDLE handle, uint8_t idx);
 int Btc08ReadPll     (BTC08_HANDLE handle);
