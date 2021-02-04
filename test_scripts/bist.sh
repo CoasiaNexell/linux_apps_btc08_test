@@ -24,9 +24,8 @@ spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x09\x00"$GOLD_TARGET"\x00\x00" | 
 
 echo "####### WRITE_NONCE #######"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x16\x00"$GOLD_NONCE$GOLD_NONCE"\x00\x00" | grep "X | "
-
-echo "####### SET_DISABLE (Applied after RUN_BIST) #######"
-spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x10\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xfe\x00\x00" > /dev/null 2>&1
+echo "####### SET_DISABLE (Enable all cores - applied after RUN_BIST) #######"
+spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" > /dev/null 2>&1
 
 echo "####### RUN_BIST #######"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x02\x00"$GOLD_HASH$GOLD_HASH$GOLD_HASH$GOLD_HASH"\x00\x00" | grep "X | "

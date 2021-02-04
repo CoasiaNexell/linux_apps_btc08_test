@@ -128,8 +128,7 @@ void DestroyGpio( GPIO_HANDLE handle )
 	pthread_mutex_destroy( &handle->hLock );
 
 	free( handle );
-	NxDbgMsg(NX_DBG_ERR, "%s()--\n", __FUNCTION__ );
-}
+ }
 
 
 int32_t GpioSetDirection( GPIO_HANDLE handle, int32_t iDirection )
