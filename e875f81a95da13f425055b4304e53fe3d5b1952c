@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "8f2e7168_4e2600b7",
+        "filename": "btc08_test/Btc08.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 341,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2021-02-04T11:21:28Z",
+      "side": 1,
+      "message": "I think the return value is wrong.\nWe should be use rx[0] and rx[1] value.",
+      "range": {
+        "startLine": 341,
+        "startChar": 0,
+        "endLine": 341,
+        "endChar": 14
+      },
+      "revId": "e875f81a95da13f425055b4304e53fe3d5b1952c",
+      "serverId": "f3c90331-7953-4206-aadc-b7348badd027",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b73b087f_36dec7fc",
+        "filename": "btc08_test/TestFunction.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 82,
+      "author": {
+        "id": 1000013
+      },
+      "writtenOn": "2021-02-04T11:21:28Z",
+      "side": 1,
+      "message": "Don\u0027t use float(double) parameter for sleep function.\nPlease see sleep function\u0027s manual.\n( unsigned int sleep(unsigned int seconds); )",
+      "range": {
+        "startLine": 82,
+        "startChar": 0,
+        "endLine": 82,
+        "endChar": 14
+      },
+      "revId": "e875f81a95da13f425055b4304e53fe3d5b1952c",
+      "serverId": "f3c90331-7953-4206-aadc-b7348badd027",
+      "unresolved": true
+    }
+  ]
+}
