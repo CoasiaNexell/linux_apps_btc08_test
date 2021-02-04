@@ -5,4 +5,5 @@ btc08_test_SOURCES = \
 	GpioControl.c \
 	Spi.c \
 	Btc08.c \
+	Utils.c \
 	main.c
