@@ -12,6 +12,10 @@ AM_INIT_AUTOMAKE([foreign subdir-objects -Wall -Werror])
 AC_PROG_CC
 
 # Checks for libraries.
+PTHREAD_FLAGS="-lpthread"
+PTHREAD_LIBS=-lpthread
+AC_SUBST(PTHREAD_FLAGS)
+AC_SUBST(PTHREAD_LIBS)
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h sys/ioctl.h unistd.h])

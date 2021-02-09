@@ -13,6 +13,8 @@ void print_command_list()
 	printf("============================\n");
 	printf("  1. Auto Address \n");
 	printf("  2. Test Bist \n");
+	printf("  6. Start Temperature Monitor \n");
+	printf("  7. Stop Temperature Monitor \n");
 	printf("============================\n");
 }
 
@@ -37,6 +39,12 @@ int main( int argc, char *argv[] )
 				break;
 			case 2:
 				TestBist();
+				break;
+			case 6:
+				StartMonTempThread();
+				break;
+			case 7:
+				ShutdownMonTempThread();
 				break;
 			default:
 				printf("Unknown command = %d\n", test_id);

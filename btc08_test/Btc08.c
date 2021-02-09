@@ -225,15 +225,22 @@ void DestroyBtc08( BTC08_HANDLE handle )
 	}
 }
 
-int Btc08ResetHW (BTC08_HANDLE handle)
+int Btc08ResetHW (BTC08_HANDLE handle, int32_t enable)
 {
 	if( !handle )
 		return -1;
 
-	GpioSetValue( handle->hReset, 0 );
-	usleep( HW_RESET_TIME );
-	GpioSetValue( handle->hReset, 1 );
-	usleep( 50000 );	//	wait 50msec : FIXME: TODO:
+	if (enable)
+	{
+		GpioSetValue( handle->hReset, 0 );
+		usleep( HW_RESET_TIME );
+	}
+	else
+	{
+		GpioSetValue( handle->hReset, 1 );
+		usleep( 50000 );	//	wait 50msec : FIXME: TODO:
+	}
+
 	return 0;
 }
 

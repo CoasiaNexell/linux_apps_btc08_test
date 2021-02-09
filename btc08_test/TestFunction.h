@@ -3,5 +3,7 @@
 
 int ResetAutoAddress();
 void TestBist();
+void StartMonTempThread();
+void ShutdownMonTempThread();
 
 #endif // _TESTFUNCTION_H_

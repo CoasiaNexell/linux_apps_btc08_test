@@ -1,6 +1,10 @@
 #include <stdint.h>
 #include <unistd.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdbool.h>
 
+#include "TempCtrl.h"
 #include "Btc08.h"
 
 #ifdef NX_DTAG
@@ -9,8 +13,9 @@
 #define NX_DTAG "[TestFunction]"
 #include "NX_DbgMsg.h"
 
-
 #define	BCAST_CHIP_ID		0x00
+pthread_mutex_t shutdown_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bool shutdown = true;
 
 /* GOLD_MIDSTATE */
 static uint8_t default_golden_midstate[32] = {
@@ -60,7 +65,8 @@ void TestBist()
 
 	//	create BTC08 instance into index 0. ( /dev/spidev0.0 )
 	BTC08_HANDLE handle = CreateBtc08(0);
-	Btc08ResetHW( handle );
+	Btc08ResetHW( handle, 1 );
+	Btc08ResetHW( handle, 0 );
 
 	numChips = Btc08AutoAddress(handle);
 
@@ -109,7 +115,8 @@ int ResetAutoAddress()
 	int numChips;
 	//	create BTC08 instance into index 0. ( /dev/spidev0.0 )
 	BTC08_HANDLE handle = CreateBtc08(0);
-	Btc08ResetHW( handle );
+	Btc08ResetHW( handle, 1 );
+	Btc08ResetHW( handle, 0 );
 
 	numChips = Btc08AutoAddress(handle);
 	NxDbgMsg( NX_DBG_INFO, "Number of Chips = %d\n", numChips );
@@ -118,4 +125,58 @@ int ResetAutoAddress()
 	return 0;
 }
 
+void ResetHW( int32_t enable )
+{
+	BTC08_HANDLE handle = CreateBtc08(0);
 
+	Btc08ResetHW( handle, enable );
+
+	DestroyBtc08( handle );
+}
+
+void *mon_temp_thread( void *arg )
+{
+	int ch = 1;
+	float mv;
+	float temperature;
+
+	while( !shutdown )
+	{
+		mv = get_mvolt(ch);
+		temperature = get_temp(mv);
+
+        NxDbgMsg( NX_DBG_INFO, "Channel %d Voltage = %.2f mV, Temperature = %.2f C\n", ch, mv, temperature );
+		if ( temperature >= 100. ) {
+			ResetHW( 1 );
+		}
+
+		sleep(1);
+	}
+
+	NxDbgMsg( NX_DBG_INFO, "Stopped temperature monitoring\n" );
+
+    return NULL;
+}
+
+void StartMonTempThread()
+{
+	int ret;
+	pthread_t mon_temp_thr;
+
+	if ( !shutdown )
+		return;
+
+	shutdown = false;
+	ret = pthread_create( &mon_temp_thr, NULL, mon_temp_thread, NULL );
+	if (ret) {
+		NxDbgMsg( NX_DBG_ERR, "Failed to start temperature monitor thread: %s\n", strerror(ret) );
+	}
+
+	pthread_detach( mon_temp_thr );
+}
+
+void ShutdownMonTempThread()
+{
+	if ( !shutdown )
+		shutdown = true;
+}
