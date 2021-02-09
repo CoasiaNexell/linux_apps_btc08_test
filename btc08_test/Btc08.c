@@ -450,7 +450,7 @@ int Btc08ReadParam   (BTC08_HANDLE handle, uint8_t chipId)
 {
 	uint8_t *rx;
 	size_t txLen = 2;
-	handle->txBuf[0] = SPI_CMD_READ_PLL;
+	handle->txBuf[0] = SPI_CMD_READ_PARM;
 	handle->txBuf[1] = chipId;
 
 
