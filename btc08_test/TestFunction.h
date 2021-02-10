@@ -3,6 +3,7 @@
 
 int ResetAutoAddress();
 void TestBist();
+void TestWork();
 void StartMonTempThread();
 void ShutdownMonTempThread();
 

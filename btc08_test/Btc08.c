@@ -86,11 +86,8 @@ enum BTC08_cmd {
 
 #define OON_IRQ_ENB			(1 << 4)
 #define LAST_CHIP_FLAG		(1 << 15)
-#define ASIC_BOOST_EN		(1 << 9)
-
 
 #define HW_RESET_TIME			(50000)		//	50 msec
-
 
 #define GPIO_RESET_0	127
 #define GPIO_IRQ_OON_0	125
@@ -99,8 +96,6 @@ enum BTC08_cmd {
 #define GPIO_RESET_1	127
 #define GPIO_IRQ_OON_1	125
 #define GPIO_IRQ_GN_1	126
-
-
 
 struct pll_conf {
 	int freq;
@@ -242,6 +237,28 @@ int Btc08ResetHW (BTC08_HANDLE handle, int32_t enable)
 	}
 
 	return 0;
+}
+
+int Btc08GpioGetValue (BTC08_HANDLE handle, GPIO_TYPE type)
+{
+	int ret = -1;
+
+	switch (type)
+	{
+		case GPIO_TYPE_OON:
+			ret = GpioGetValue( handle->hOon );
+			break;
+		case GPIO_TYPE_GN:
+			ret = GpioGetValue( handle->hGn );
+			break;
+		case GPIO_TYPE_RESET:
+			ret = GpioGetValue( handle->hReset );
+			break;
+		default:
+			break;
+	}
+
+	return ret;
 }
 
 int	Btc08ReadId (BTC08_HANDLE handle, uint8_t chipId)
@@ -511,12 +528,11 @@ int Btc08ReadTarget  (BTC08_HANDLE handle, uint8_t chipId )
 }
 
 
-int Btc08RunJob      (BTC08_HANDLE handle, uint8_t chipId, uint8_t jobId )
+int Btc08RunJob      (BTC08_HANDLE handle, uint8_t chipId, uint8_t option, uint8_t jobId )
 {
 	handle->txBuf[0] = SPI_CMD_RUN_JOB;
 	handle->txBuf[1] = chipId;
-	//handle->txBuf[2] = ASIC_BOOST_EN;
-	handle->txBuf[2] = 1<<1;
+	handle->txBuf[2] = option;
 	handle->txBuf[3] = jobId;
 
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2+2, DUMMY_BYTES ) )
@@ -530,7 +546,7 @@ int Btc08RunJob      (BTC08_HANDLE handle, uint8_t chipId, uint8_t jobId )
 }
 
 
-int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId )
+int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size)
 {
 	uint8_t *rx;
 	size_t txLen = 2;
@@ -550,6 +566,9 @@ int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId )
 	//
 
 	rx = handle->rxBuf + txLen;
+
+	memcpy(res, rx, res_size);
+
 	// rx[0]: [31:24] OON Job ID
 	// rx[1]: [23:16] GN Job ID
 	// rx[2]: [10:8]  10/9/8 : Result FIFO Full/OON IRQ/GN IRQ Flag
@@ -561,6 +580,7 @@ int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId )
 	NxDbgMsg(NX_DBG_INFO, " <== OON Job ID(%d), GN Job ID(%d)\n", rx[0], rx[1]);
 	NxDbgMsg(NX_DBG_INFO, " <== Flag FIFO Full(%d), OON IRQ(%d), GN IRQ(%d)\n", fifo_full, oon_irq, gn_irq);
 	NxDbgMsg(NX_DBG_INFO, " <== Chip ID(%d)\n", rx[3]);
+
 	return 0;
 }
 
