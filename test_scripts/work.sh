@@ -23,8 +23,13 @@ GOLD_HASH="\x00\x00\x00\x00\x00\x00\x00\x00\x00\x22\x09\x3d\xd4\x38\xed\x47\xfa\
 
 #parameter GOLD_TARGET	= 32'h17376f56;
 
+echo "####### WRITE_PARM #######"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x07\x00"$GOLD_MIDSTATE$GOLD_DATA$GOLD_MIDSTATE"\x00\x00"
+
+echo "####### WRITE_TARGET #######"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x09\x00"$GOLD_TARGET"\x00\x00"
+
+echo "####### WRITE_NONCE #######"
 #spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x16\x00\x00\x00\x00\x00\xff\xff\xff\xff\x00\x00"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x16\x00"$GOLD_NONCE_RANGE"\x00\x00"
 #spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x16\x00\x99\x62\xe3\x01\x99\x62\xe3\x01\x00\x00" > /dev/null 2>&1
@@ -33,9 +38,9 @@ spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x16\x00"$GOLD_NONCE_RANGE"\x00\x0
 #spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x09\x00\xff\xff\xff\xff\x06\x40\x00\x00" > /dev/null 2>&1
 #spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x16\x00\xff\xff\xff\x0b\xff\xff\xff\x0b\x00\x00" > /dev/null 2>&1
 
+echo "####### RUN_JOB #######"
 # run job
 #spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x0b\x00\x00\x01\x01\x01"
-
 # run job with asicboost
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x0b\x00\x00\x21\x01\x01"
 
@@ -47,17 +52,19 @@ spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x0b\x00\x00\x21\x01\x01"
 exit
 
 ############################################################################
-# read job id
+echo "####### READ_JOB_ID #######"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x0c\x00\x00\x00\x00\x00\x00\x00"
 
 ############################################################################
 # read result from chip_id 3
+echo "####### READ_RESULT #######"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x0d\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 ############################################################################
-# clear oon
+echo "####### CLEAR_OUT_OF_NONCE #######"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x0e\x00\x00\x00"
 
+echo "####### READ_BIST #######"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x03\x01\x00\x00"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x03\x02\x00\x00"
 spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x03\x03\x00\x00"
