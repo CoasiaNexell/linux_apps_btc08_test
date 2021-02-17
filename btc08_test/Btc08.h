@@ -23,6 +23,11 @@
 #include <stdint.h>
 
 typedef struct tag_BTC08_INFO *BTC08_HANDLE;
+typedef enum {
+    GPIO_TYPE_OON,
+    GPIO_TYPE_GN,
+    GPIO_TYPE_RESET
+} GPIO_TYPE;
 
 //
 //	pre-defined : SPI index & GN/OON/RESET pins
@@ -33,6 +38,7 @@ BTC08_HANDLE CreateBtc08( int32_t index );
 void DestroyBtc08( BTC08_HANDLE handle );
 
 int Btc08ResetHW     (BTC08_HANDLE handle, int32_t enable);
+int Btc08GpioGetValue (BTC08_HANDLE handle, GPIO_TYPE type);
 int	Btc08ReadId      (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08AutoAddress (BTC08_HANDLE handle);
 int Btc08RunBist     (BTC08_HANDLE handle, uint8_t *hash, uint8_t *hash2, uint8_t *hash3, uint8_t *hash4);
@@ -44,8 +50,8 @@ int Btc08WriteParam  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *midState, ui
 int Btc08ReadParam   (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08WriteTarget (BTC08_HANDLE handle, uint8_t chipId, uint8_t *target );
 int Btc08ReadTarget  (BTC08_HANDLE handle, uint8_t chipId );
-int Btc08RunJob      (BTC08_HANDLE handle, uint8_t chipId, uint8_t jobId );
-int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId );
+int Btc08RunJob      (BTC08_HANDLE handle, uint8_t chipId, uint8_t option, uint8_t jobId);
+int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08ReadResult  (BTC08_HANDLE handle, uint8_t chipId );
 int Btc08ClearOON    (BTC08_HANDLE handle, uint8_t chipId );
 int Btc08SetDisable  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *disable );

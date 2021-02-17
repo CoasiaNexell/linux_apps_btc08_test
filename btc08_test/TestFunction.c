@@ -14,6 +14,8 @@
 #include "NX_DbgMsg.h"
 
 #define	BCAST_CHIP_ID		0x00
+#define ASIC_BOOST_EN		(0x02)
+
 pthread_mutex_t shutdown_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool shutdown = true;
 
@@ -35,6 +37,15 @@ static uint8_t default_golden_data[12] = {
 /* GOLD_NONCE_FOR_BIST */
 static uint8_t golden_nonce_for_bist[4] = {
 	0x66, 0xcb, 0x34, 0x26
+};
+
+/* GOLDEN_NONCE_FOR_WORK */
+static uint8_t golden_nonce_start[4] = {
+	0x66, 0xcb, 0x00, 0x00
+};
+
+static uint8_t golden_nonce_end[4] = {
+	0x66, 0xcb, 0xff, 0xff
 };
 
 /* GOLD_TARGET */
@@ -123,6 +134,57 @@ int ResetAutoAddress()
 
 	DestroyBtc08( handle );
 	return 0;
+}
+
+void TestWork()
+{
+	int numChips;
+	int chipId, jobId;		// TODO: Need to check if jobId is 0x21
+	int fifo_full, oon_irq, gn_irq;
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+
+	BTC08_HANDLE handle = CreateBtc08(0);
+
+	Btc08ResetHW(handle, 1);
+	Btc08ResetHW(handle, 0);
+
+	/* Auto Address */
+	numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "Number of Chips = %d\n", numChips);
+
+	/* Run job without asicboot */
+	Btc08WriteParam(handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
+
+	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
+
+	Btc08WriteNonce(handle, BCAST_CHIP_ID, golden_nonce_start, golden_nonce_end);
+
+	Btc08RunJob(handle, BCAST_CHIP_ID, 0x00, jobId);
+
+	/* Read jobid */
+	Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
+	fifo_full = ((res[2] & (1<<2)) != 0);
+	oon_irq = ((res[2] & (1<<1)) != 0);
+	gn_irq = ((res[2] & (1<<0)) != 0);
+	chipId = res[3];
+
+	NxDbgMsg(NX_DBG_INFO, " <== OON Job ID(%d), GN Job ID(%d)\n", res[0], res[1]);
+	NxDbgMsg(NX_DBG_INFO, " <== Flag FIFO Full(%d), OON IRQ(%d), GN IRQ(%d)\n", fifo_full, oon_irq, gn_irq);
+	NxDbgMsg(NX_DBG_INFO, " <== Chip ID(%d)\n", chipId);
+
+	/* Read result for chipId */
+	Btc08ReadResult(handle, chipId);		// TODO: Need to check if chipId is 3
+
+	/* Clear OON */
+	Btc08ClearOON(handle, BCAST_CHIP_ID);
+
+	NxDbgMsg(NX_DBG_INFO, "GPIO Value: OON(%d), GN(%d), RESET(%d)\n",
+				Btc08GpioGetValue (handle, GPIO_TYPE_OON ),
+				Btc08GpioGetValue (handle, GPIO_TYPE_GN ),
+				Btc08GpioGetValue (handle, GPIO_TYPE_RESET));
+
+	DestroyBtc08( handle );
 }
 
 void ResetHW( int32_t enable )
