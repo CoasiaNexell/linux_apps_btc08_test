@@ -69,15 +69,16 @@ GPIO_HANDLE CreateGpio( int32_t iGpio )
 
 		if( 0 > fd )
 		{
-			NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO.\n" );
+			NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO to export.\n" );
 			goto ERROR_EXIT;
 		}
 
 		len = snprintf( buf, sizeof(buf), "%d", iGpio );
+		NxDbgMsg(NX_DBG_ERR, "%s\n", buf);
 
 		if( 0 > write(fd, buf, len) )
 		{
-			NxDbgMsg(NX_DBG_ERR, "Fail, Write GPIO.\n" );
+			NxDbgMsg(NX_DBG_ERR, "Fail, Write GPIO to export.\n" );
 			close( fd );
 			goto ERROR_EXIT;
 		}
@@ -113,14 +114,14 @@ void DestroyGpio( GPIO_HANDLE handle )
 	fd = open("/sys/class/gpio/unexport", O_WRONLY);
 	if( 0 > fd )
 	{
-		NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO.\n" );
+		NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO to unexport handle.\n" );
 		return;
 	}
 	len = snprintf( buf, sizeof(buf), "%d", handle->iPort );
 	if( 0 > write(fd, buf, len) )
 	{
 		close( fd );
-		NxDbgMsg(NX_DBG_ERR, "Fail, Write GPIO.\n" );
+		NxDbgMsg(NX_DBG_ERR, "Fail, Write GPIO to unexport handle.\n" );
 		return;
 	}
 	close( fd );
@@ -193,7 +194,7 @@ int32_t GpioSetValue( GPIO_HANDLE handle, int32_t iValue )
 	fd = open(buf, O_RDWR);
 	if( 0 > fd )
 	{
-		NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO.\n" );
+		NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO to set value.\n" );
 
 		return -1;
 	}
@@ -204,7 +205,7 @@ int32_t GpioSetValue( GPIO_HANDLE handle, int32_t iValue )
 	{
 		close(fd);
 
-		NxDbgMsg(NX_DBG_ERR, "Fail, Write GPIO.\n" );
+		NxDbgMsg(NX_DBG_ERR, "Fail, Write GPIO to set value.\n" );
 
 		return -1;
 	}
@@ -229,14 +230,14 @@ int32_t GpioGetValue( GPIO_HANDLE handle )
 	fd = open(buf, O_RDWR);
 	if( 0 > fd )
 	{
-		NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO.\n" );
+		NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO to get value.\n" );
 		return -1;
 	}
 
 	if( 0 > read(fd, buf, sizeof(buf)) )
 	{
 		close(fd);
-		NxDbgMsg(NX_DBG_ERR, "Fail, Read GPIO.\n" );
+		NxDbgMsg(NX_DBG_ERR, "Fail, Read GPIO to get value.\n" );
 		return -1;
 	}
 

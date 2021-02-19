@@ -70,7 +70,17 @@ function get_pin_gn {
 
 ############################################################################
 # ret = {header1 mid1 hash1 header2 mid2 hash2 header3 mid3 hash3 header4 mid4 hash4}
-####### ret = {vmask1 vmask2 vmask3 vmask4 header mid1 mid2 mid3 mid4 hash1 hash2 hash3 hash4}
+#### ret = {vmask1 vmask2 vmask3 vmask4 header mid1 mid2 mid3 mid4 hash1 hash2 hash3 hash4}
+####################################################################################
+# [Block Header(80bytes)]
+# = version(4bytes) + previous block hash(32bytes) +
+#   merkel root(32bytes) + timestamp(4bytes) + difficulty target(4bytes) + nonce(4bytes)
+# [Block] = Header(80bytes) + transactions
+#   = block size(4bytes) + block header(80bytes) + transaction counter(1-9bytes) +
+#     transactions(variables)
+####################################################################################
+
+####################################################################################
 function gen_data {
 	vmask1=`printf "%04x%04x" $RANDOM $RANDOM`
 	vmask2=`printf "%04x%04x" $RANDOM $RANDOM`
@@ -226,6 +236,7 @@ hash_errors=0
 nonce_errors=0
 while ((1))
 do
+    # Generate data for header
 	header=$(gen_data)
 
 	HWPARMS=$(convert_to_hw_parm "${header}")
@@ -235,11 +246,11 @@ do
 	ret=$(spi_txrx "$CMD_WR_PARM 00 $HWPARMS 00 00")
 	ret=$(spi_txrx "$CMD_WR_TARGET 00 $FULL_TARGET 00 00")
 	ret=$(spi_txrx "$CMD_WR_NONCE 00 $NONCES $NONCES 00 00")
-
+	# RUN_JOB with the option asicboost and fixnonce mode
 	ret=$(spi_txrx "$CMD_RUN_JOB 00 03 01 00 00")
 
-	# read job id
-	ret=$(spi_txrx "0C 00 $ZEROS_32BITS$DUMMY_SPI")
+	# READ_JOB_ID for all chips
+	ret=$(spi_txrx "$CMD_RD_JOBID 00 $ZEROS_32BITS$DUMMY_SPI")
 
 	chipid_str=`echo $ret | awk '{print $6}'`
 	flags_str=`echo $ret | awk '{print $5}'`
@@ -252,8 +263,9 @@ do
 	chip3_oon=0
 
 	while (( 1 )); do
+	    # Check OON Interrupt Flag
 		if ((flags & 2)); then
-			ret=$(spi_txrx "0e $chipid_str$DUMMY_SPI")
+			ret=$(spi_txrx "$CMD_CLR_OON $chipid_str$DUMMY_SPI")
 			if [ $chipid_str == "01" ]; then
 				chip1_oon=1
 			fi
@@ -265,8 +277,8 @@ do
 			fi
 		fi
 
-		# read job id
-		ret=$(spi_txrx "0C 00 $ZEROS_32BITS$DUMMY_SPI")
+		# READ_JOB_ID for all chips
+		ret=$(spi_txrx "$CMD_RD_JOBID 00 $ZEROS_32BITS$DUMMY_SPI")
 
 		chipid_str=`echo $ret | awk '{print $6}'`
 		flags_str=`echo $ret | awk '{print $5}'`
@@ -274,8 +286,10 @@ do
 		flags=$((flags_str))
 		echo "flags = $flags, chipid = $chipid"
 
+	    # Check GN Interrupt Flag
 		if ((flags & 1)); then
-			ret=$(spi_txrx "20 $chipid_str $ZEROS_1024BITS$DUMMY_SPI")
+		    # READ_HASH from chip#
+			ret=$(spi_txrx "$CMD_RD_HASH $chipid_str $ZEROS_1024BITS$DUMMY_SPI")
 			hw_hashs=`echo $ret | sed 's/......//' | sed 's/......$//'`
 
 			if [ "$HASHS" != "$hw_hashs" ]; then
@@ -288,8 +302,8 @@ do
 				hash_oks=$((hash_oks+1))
 			fi
 
-			# read result from chip_id 3
-			ret=$(spi_txrx "0D $chipid_str $ZEROS_128BITS$ZEROS_16BITS$DUMMY_SPI")
+			# READ_RESULT from chip#
+			ret=$(spi_txrx "$CMD_RD_RESULT $chipid_str $ZEROS_128BITS$ZEROS_16BITS$DUMMY_SPI")
 			hw_nonces=`echo $ret | sed 's/......//' | sed 's/............$//'`
 
 			if [ "$NONCES $NONCES $NONCES $NONCES" != "$hw_nonces" ]; then
@@ -308,9 +322,11 @@ do
 			break
 		fi
 
+		# Wait 1s
 		sleep 1
-		# read job id
-		ret=$(spi_txrx "0C 00 $ZEROS_32BITS$DUMMY_SPI")
+
+		# READ_JOB_ID for all chips
+		ret=$(spi_txrx "$CMD_RD_JOBID 00 $ZEROS_32BITS$DUMMY_SPI")
 
 		chipid_str=`echo $ret | awk '{print $6}'`
 		flags_str=`echo $ret | awk '{print $5}'`

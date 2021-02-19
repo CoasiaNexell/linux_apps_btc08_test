@@ -4,6 +4,7 @@
 int ResetAutoAddress();
 void TestBist();
 void TestWork();
+void TestWorkLoop();
 void StartMonTempThread();
 void ShutdownMonTempThread();
 

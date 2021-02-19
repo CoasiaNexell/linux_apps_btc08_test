@@ -14,11 +14,11 @@ void print_command_list()
 	printf("  1. Auto Address \n");
 	printf("  2. Test Bist \n");
 	printf("  3. Test Work \n");
+	printf("  4. Test WorkLoop \n");
 	printf("  6. Start Temperature Monitor \n");
 	printf("  7. Stop Temperature Monitor \n");
 	printf("============================\n");
 }
-
 
 int main( int argc, char *argv[] )
 {
@@ -43,6 +43,9 @@ int main( int argc, char *argv[] )
 				break;
 			case 3:
 				TestWork();
+				break;
+			case 4:
+				TestWorkLoop();
 				break;
 			case 6:
 				StartMonTempThread();

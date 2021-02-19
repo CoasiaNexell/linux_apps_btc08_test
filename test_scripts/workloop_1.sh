@@ -66,6 +66,7 @@ fi
 ret=$(spi_txrx "$CMD_WR_PARM 00$GOLD_MIDSTATE$GOLD_DATA$GOLD_MIDSTATE 00 00")
 ret=$(spi_txrx "$CMD_WR_TARGET 00$GOLD_TARGET 00 00")
 ret=$(spi_txrx "$CMD_WR_NONCE 00$STARTNONCE$ENDNONCE 00 00")
+####### Run job with asicboost for 4 works #######
 ret=$(spi_txrx "$CMD_RUN_JOB 00 02 01 00 00")
 ret=$(spi_txrx "$CMD_RUN_JOB 00 02 02 00 00")
 ret=$(spi_txrx "$CMD_RUN_JOB 00 02 03 00 00")
@@ -76,10 +77,12 @@ if [ "$(get_pin_oon)" != "1" ]; then
 fi
 
 jobidx=1
-jobcnt=1
+jobid=1
 while ((1))
 do
+	####### Check OON PIN #######
 	if [ "$(get_pin_oon)" = "0" ]; then
+		####### If OON pin is low, READ_ID to check if FIFO is full #######
 		echo "`date +"%T"`: pin OON LOW"
 		ret=$(spi_txrx "$CMD_RD_ID 01 00 00 00 00 00 00")
 		JOB_CNT=`echo $ret | awk '{print $5}'`
@@ -88,19 +91,22 @@ do
 		if (( $left_fifo == 0 )); then
 			echo "`date +"%T"`: read_id = ${ret}!!!, fifo full !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 		else
+			####### If FIFO is not full, CLEAR_OUT_OF_NONCE to clear OON IRQ and then RUN_JOB #######
 			chipid="00"
-			echo "wr job(${jobidx}) ${jobcnt} to ${chipid} at `date +"%T"`"
+			echo "wr job(${jobidx}) ${jobid} to ${chipid} at `date +"%T"`"
 			ret=$(spi_txrx "$CMD_CLR_OON 00 00 00")
-			ret=$(spi_txrx "$CMD_RUN_JOB ${chipid} 02 `printf "%02x" $jobcnt` 00")
-			jobcnt=$(( jobcnt+1 ))
+			ret=$(spi_txrx "$CMD_RUN_JOB ${chipid} 02 `printf "%02x" $jobid` 00")
+			jobid=$(( jobid+1 ))
 			jobidx=$(( jobidx+1 ))
-			if [ $jobcnt -gt 16 ]; then 
-				jobcnt=1 
+			if [ $jobid -gt 16 ]; then
+				jobid=1
 			fi
 		fi
 	fi
 
+	####### Check GN PIN #######
 	if [ "$(get_pin_gn)" = "0" ]; then
+		####### If GN pin is low, READ_JOB_ID to check GN IRQ flag #######
 		ret=$(spi_txrx "$CMD_RD_JOBID 00 00 00 00 00 00 00")
 		READJOBID_VAL=`echo $ret | awk '{print $3" "$4" "$5" "$6}'`
 		oonjobid=`echo $READJOBID_VAL | awk '{print $1}'`
@@ -109,11 +115,16 @@ do
 		chipid=`echo $READJOBID_VAL | awk '{print $4}'`
 		echo "`date +"%T"` pin GN LOW"
 		gnflag=$((IFLAGS&1))
+
 		if (( $gnflag != 1 )); then
 			echo "`date +"%T"`: flags = $IFLAGS!!!, it's not GN $READJOBID_VAL!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 		else
 			echo "`date +"%T"` GN ($READJOBID_VAL): jobid = $gnjobid, chipid = $chipid"
+
+			####### READ_HASH #######
 			HASHS=`spidevtest -s 500000 -D /dev/spidev0.0 -v -p "\x20\x${chipid}\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" | grep "RX | " | awk -F'|'  '{print $2}' | tr '\n' ' ' | sed 's/    / /g' | sed 's/ __//g'`
+
+			####### READ_RESULT to read GN and clear GN IRQ #######
 			ret=$(spi_txrx "$CMD_RD_RESULT ${chipid} 00 00 00 00 00 00 00 00 00 00 00 00")
 			NONCE=`echo $ret | awk '{print $3$4$5$6" "$7$8$9$10}'`
 			echo "`date +"%T"` hash at chip${chipid} : ${HASHS}, nonce: ${NONCE}, jobid = ${gnjobid}"

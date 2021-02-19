@@ -146,8 +146,6 @@ struct tag_BTC08_INFO{
 	uint8_t			rxBuf[SPI_MAX_TRANS];
 };
 
-
-
 BTC08_HANDLE CreateBtc08( int32_t index )
 {
 	int32_t gpioReset, gpioOon, gpioGn;
@@ -261,7 +259,7 @@ int Btc08GpioGetValue (BTC08_HANDLE handle, GPIO_TYPE type)
 	return ret;
 }
 
-int	Btc08ReadId (BTC08_HANDLE handle, uint8_t chipId)
+int	Btc08ReadId (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size)
 {
 	uint8_t *rx;
 	size_t txLen = 2;
@@ -281,7 +279,7 @@ int	Btc08ReadId (BTC08_HANDLE handle, uint8_t chipId)
 	{
 		// SPI Error
 		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
-		return 0;
+		return -1;
 	}
 
 	rx = handle->rxBuf + txLen;
@@ -290,8 +288,11 @@ int	Btc08ReadId (BTC08_HANDLE handle, uint8_t chipId)
 	// rx[2]: [10:8] Number of jobs in FIFO
 	// rx[3]: [7:0] Chip ID
 
-	//NxDbgMsg(NX_DBG_ERR, "%s() NumJobs in FIFO = %d\n", __FUNCTION__, (rx[2] & 7) );
-	return (int)( rx[3] );
+	memcpy(res, rx, res_size);
+
+	NxDbgMsg(NX_DBG_ERR, "%s() NumJobs in FIFO = %d\n", __FUNCTION__, (rx[2] & 7));
+
+	return 0;
 }
 
 
@@ -306,7 +307,7 @@ int Btc08AutoAddress (BTC08_HANDLE handle)
 	{
 		// SPI Error
 		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
-		return 0;
+		return -1;
 	}
 
 	rx = handle->rxBuf + txLen;
@@ -314,8 +315,6 @@ int Btc08AutoAddress (BTC08_HANDLE handle)
 	// rx[1] : number of chips
 	return rx[1];
 }
-
-
 
 int Btc08RunBist(BTC08_HANDLE handle, uint8_t *hash, uint8_t *hash2, uint8_t *hash3, uint8_t *hash4)
 {
@@ -424,8 +423,8 @@ int Btc08ReadPll(BTC08_HANDLE handle)
 	return (rx[1]&(1<<7)) ? 1 : 0;
 }
 
-
-int Btc08WriteParam  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *midState, uint8_t *data )
+/* Set param(1120bits) - MidState3(126bits) + MidState2 + MidState1 + Data(96bits) + MidState */
+int Btc08WriteParam  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *midState, uint8_t *data)
 {
 	int txLen = 0;
 	handle->txBuf[0] = SPI_CMD_WRITE_PARM;
@@ -484,8 +483,8 @@ int Btc08ReadParam   (BTC08_HANDLE handle, uint8_t chipId)
 	return (rx[1]&(1<<7)) ? 1 : 0;
 }
 
-
-int Btc08WriteTarget (BTC08_HANDLE handle, uint8_t chipId, uint8_t *target )
+/* Set target to compare with hash result */
+int Btc08WriteTarget (BTC08_HANDLE handle, uint8_t chipId, uint8_t *target)
 {
 	size_t txLen = 2;
 	handle->txBuf[0] = SPI_CMD_WRITE_TARGET;
@@ -573,22 +572,24 @@ int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 	// rx[1]: [23:16] GN Job ID
 	// rx[2]: [10:8]  10/9/8 : Result FIFO Full/OON IRQ/GN IRQ Flag
 	// rx[3]: [7:0]   Chip ID
-	fifo_full = ((rx[2] & (1<<2)) != 0);
-	oon_irq = ((rx[2] & (1<<1)) != 0);
-	gn_irq = ((rx[2] & (1<<0)) != 0);
+	fifo_full = rx[2] & (1<<2);
+	oon_irq = rx[2] & (1<<1);
+	gn_irq = rx[2] & (1<<0);
 
-	NxDbgMsg(NX_DBG_INFO, " <== OON Job ID(%d), GN Job ID(%d)\n", rx[0], rx[1]);
-	NxDbgMsg(NX_DBG_INFO, " <== Flag FIFO Full(%d), OON IRQ(%d), GN IRQ(%d)\n", fifo_full, oon_irq, gn_irq);
-	NxDbgMsg(NX_DBG_INFO, " <== Chip ID(%d)\n", rx[3]);
+	NxDbgMsg(NX_DBG_INFO, " <== OON jobId(%d) GN jobid(%d) ChipId(%d) %s %s %s\n",
+				rx[0], rx[1], rx[3],
+				(0 != fifo_full) ? "FIFO is full":"",
+				(0 != oon_irq) ? "OON IRQ":"",
+				(0 != gn_irq) ? "GN IRQ":"");
 
 	return 0;
 }
 
-int Btc08ReadResult  (BTC08_HANDLE handle, uint8_t chipId )
+int Btc08ReadResult  (BTC08_HANDLE handle, uint8_t chipId, uint8_t* gn, uint8_t gn_size)
 {
 	uint8_t *rx;
 	size_t txLen=2;
-	int lower, lower2, lower3, upper;
+	uint8_t lower = 0x00, lower2 = 0x00, lower3 = 0x00, upper = 0x00, validCnt = 0x00;
 	handle->txBuf[0] = SPI_CMD_READ_RESULT;
 	handle->txBuf[1] = chipId;
 
@@ -600,18 +601,37 @@ int Btc08ReadResult  (BTC08_HANDLE handle, uint8_t chipId )
 	}
 
 	rx = handle->rxBuf + txLen;
-	// rX[0]: [139:136] Inst_Lower_3/Inst_Lower_2/Inst_Lower/Upper found golden nonce
-	// rX[1]: [135:128] read ValidCnt in Core
-	// rX[2-5]: [127:96]  read_golden_nonce of Inst_Lower
-	// rX[6-9]: [95:64]  read_golden_nonce of Inst_Lower
-	// rX[10-13]: [63:32]  read_golden_nonce of Inst_Lower
-	// rX[14-17]: [31:0]  read_golden_nonce of Inst_Upper
-	lower3 = ((rx[0] & 8) != 0);
-	lower2 = ((rx[0] & 4) != 0);
-	lower  = ((rx[0] & 2) != 0);
-	upper  = ((rx[0] & 1) != 0);
-	NxDbgMsg(NX_DBG_INFO, " <== GN found in Inst_%s\n",
-			lower3 ? "Lower_3": (lower2 ? "Lower_2" : (lower ? "Lower": (upper ? "Upper":""))));
+
+	memcpy(gn, rx, gn_size);
+
+	// rx[   0]: [139:136] Inst_Lower_3/Inst_Lower_2/Inst_Lower/Upper found golden nonce
+	// rx[   1]: [135:128] read ValidCnt in Core
+	// rx[ 2-5]: [127:96] read_golden_nonce of Inst_Lower
+	// rx[ 6-9]: [95:64]  read_golden_nonce of Inst_Lower
+	// rx[10-13]: [63:32] read_golden_nonce of Inst_Lower
+	// rx[14-17]: [31:0]  read_golden_nonce of Inst_Upper
+	lower3 = rx[0] & (1<<3);
+	lower2 = rx[0] & (1<<2);
+	lower  = rx[0] & (1<<1);
+	upper  = rx[0] & (1<<0);
+	validCnt = gn[1];
+
+	if (0 != lower3) {
+		NxDbgMsg(NX_DBG_INFO, " <== Lower_3 found golden nonce %02x %02x %02x %02x",
+			rx[2], rx[3], rx[4], rx[5]);
+	}
+	if (0 != lower2) {
+		NxDbgMsg(NX_DBG_INFO, " <== Lower_2 found golden nonce %02x %02x %02x %02x",
+			rx[6], rx[7], rx[8], rx[9]);
+	}
+	if (0 != lower) {
+		NxDbgMsg(NX_DBG_INFO, " <== Lower found golden nonce %02x %02x %02x %02x",
+			rx[10], rx[11], rx[12], rx[13]);
+	}
+	if (0 != upper) {
+		NxDbgMsg(NX_DBG_INFO, " <== Upper found golden nonce %02x %02x %02x %02x",
+			rx[14], rx[15], rx[16], rx[17]);
+	}
 
 	return 0;
 }
@@ -713,7 +733,7 @@ int Btc08ReadTemp    (BTC08_HANDLE handle, uint8_t chipId )
 	return 0;
 }
 
-
+/* WRITE_NONCE to set the range of nonce range */
 int Btc08WriteNonce  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *startNonce, uint8_t *endNonce )
 {
 	size_t txLen = 2;
@@ -733,7 +753,7 @@ int Btc08WriteNonce  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *startNonce, 
 }
 
 
-int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId )
+int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId, uint8_t* hash, uint8_t hash_size)
 {
 	uint8_t *rx;
 	size_t txLen = 2;
@@ -748,6 +768,7 @@ int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId )
 	}
 
 	rx = handle->rxBuf + txLen;
+	memcpy(hash, rx, hash_size);
 
 	return 0;
 }
