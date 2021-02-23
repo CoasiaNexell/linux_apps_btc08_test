@@ -74,8 +74,6 @@ GPIO_HANDLE CreateGpio( int32_t iGpio )
 		}
 
 		len = snprintf( buf, sizeof(buf), "%d", iGpio );
-		NxDbgMsg(NX_DBG_ERR, "%s\n", buf);
-
 		if( 0 > write(fd, buf, len) )
 		{
 			NxDbgMsg(NX_DBG_ERR, "Fail, Write GPIO to export.\n" );
@@ -230,7 +228,7 @@ int32_t GpioGetValue( GPIO_HANDLE handle )
 	fd = open(buf, O_RDWR);
 	if( 0 > fd )
 	{
-		NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO to get value.\n" );
+		NxDbgMsg(NX_DBG_ERR, "Fail, Open GPIO to get value.(%s)\n", buf );
 		return -1;
 	}
 

@@ -33,7 +33,7 @@
 #define NX_DTAG "[CBtc08]"
 #include "NX_DbgMsg.h"
 
-
+#define DEBUG_RESULT	0
 
 enum BTC08_cmd {
 	SPI_CMD_READ_ID			= 0x00,
@@ -63,7 +63,7 @@ enum BTC08_cmd {
 	SPI_CMD_SET_PLL_RESETB 	= 0x35,
 };
 
-#define DUMMY_BYTES			0
+#define DUMMY_BYTES			2
 #define	BCAST_CHIP_ID		0x00
 #define CMD_LEN				1
 #define	CHIP_ID_LEN			1
@@ -145,6 +145,15 @@ struct tag_BTC08_INFO{
 	uint8_t			txBuf[SPI_MAX_TRANS];
 	uint8_t			rxBuf[SPI_MAX_TRANS];
 };
+
+
+static void _WriteDummy(BTC08_HANDLE handle, int txlen)
+{
+	handle->txBuf[txlen+0] = 0;
+	handle->txBuf[txlen+1] = 0;
+	handle->txBuf[txlen+2] = 0;
+	handle->txBuf[txlen+3] = 0;
+}
 
 BTC08_HANDLE CreateBtc08( int32_t index )
 {
@@ -275,6 +284,7 @@ int	Btc08ReadId (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_
 	handle->txBuf[0] = SPI_CMD_READ_ID;
 	handle->txBuf[1] = chipId;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 4+DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -290,7 +300,9 @@ int	Btc08ReadId (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_
 
 	memcpy(res, rx, res_size);
 
+#if DEBUG_RESULT
 	NxDbgMsg(NX_DBG_ERR, "%s() NumJobs in FIFO = %d\n", __FUNCTION__, (rx[2] & 7));
+#endif
 
 	return 0;
 }
@@ -303,6 +315,7 @@ int Btc08AutoAddress (BTC08_HANDLE handle)
 	handle->txBuf[0] = SPI_CMD_AUTO_ADDRESS;
 	handle->txBuf[1] = 0x00;				//	Chip ID : Broadcast
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 2+DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -328,6 +341,7 @@ int Btc08RunBist(BTC08_HANDLE handle, uint8_t *hash, uint8_t *hash2, uint8_t *ha
 	memcpy(handle->txBuf+txLen, hash3, HASH_LEN);	txLen += HASH_LEN;
 	memcpy(handle->txBuf+txLen, hash4, HASH_LEN);	txLen += HASH_LEN;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -346,7 +360,7 @@ uint8_t* Btc08ReadBist    (BTC08_HANDLE handle, uint8_t chipId)
 	handle->txBuf[0] = SPI_CMD_READ_BIST;
 	handle->txBuf[1] = chipId;
 
-
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 2 + DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -370,6 +384,7 @@ int Btc08Reset       (BTC08_HANDLE handle)
 	handle->txBuf[0] = SPI_CMD_RESET;
 	handle->txBuf[1] = 0x00;
 
+	_WriteDummy(handle, 2);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -390,6 +405,7 @@ int Btc08SetPllConfig(BTC08_HANDLE handle, uint8_t idx)
 	handle->txBuf[4] = (uint8_t)(pll_sets[idx].val>>24)&0xff;
 	handle->txBuf[5] = (uint8_t)(pll_sets[idx].val>>24)&0xff;
 
+	_WriteDummy(handle, 6);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2+4, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -408,6 +424,7 @@ int Btc08ReadPll(BTC08_HANDLE handle)
 	handle->txBuf[0] = SPI_CMD_READ_PLL;
 	handle->txBuf[1] = 0x00;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 4+DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -451,6 +468,7 @@ int Btc08WriteParam  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *midState, ui
 		memcpy( handle->txBuf+txLen, midState, MIDSTATE_LEN );	txLen += MIDSTATE_LEN;
 	}
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -469,7 +487,7 @@ int Btc08ReadParam   (BTC08_HANDLE handle, uint8_t chipId)
 	handle->txBuf[0] = SPI_CMD_READ_PARM;
 	handle->txBuf[1] = chipId;
 
-
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 4+DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -493,6 +511,7 @@ int Btc08WriteTarget (BTC08_HANDLE handle, uint8_t chipId, uint8_t *target)
 	memcpy( handle->txBuf+txLen, target, TARGET_LEN );
 	txLen += TARGET_LEN;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -511,7 +530,7 @@ int Btc08ReadTarget  (BTC08_HANDLE handle, uint8_t chipId )
 	handle->txBuf[0] = SPI_CMD_READ_TARGET;
 	handle->txBuf[1] = chipId;
 
-
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, TARGET_LEN+DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -534,6 +553,7 @@ int Btc08RunJob      (BTC08_HANDLE handle, uint8_t chipId, uint8_t option, uint8
 	handle->txBuf[2] = option;
 	handle->txBuf[3] = jobId;
 
+	_WriteDummy(handle, 4);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2+2, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -553,6 +573,7 @@ int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 	handle->txBuf[0] = SPI_CMD_READ_JOB_ID;
 	handle->txBuf[1] = chipId;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 4+DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -576,11 +597,13 @@ int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 	oon_irq = rx[2] & (1<<1);
 	gn_irq = rx[2] & (1<<0);
 
+#if (DEBUG_RESULT)
 	NxDbgMsg(NX_DBG_INFO, " <== OON jobId(%d) GN jobid(%d) ChipId(%d) %s %s %s\n",
 				rx[0], rx[1], rx[3],
 				(0 != fifo_full) ? "FIFO is full":"",
 				(0 != oon_irq) ? "OON IRQ":"",
 				(0 != gn_irq) ? "GN IRQ":"");
+#endif
 
 	return 0;
 }
@@ -593,6 +616,7 @@ int Btc08ReadResult  (BTC08_HANDLE handle, uint8_t chipId, uint8_t* gn, uint8_t 
 	handle->txBuf[0] = SPI_CMD_READ_RESULT;
 	handle->txBuf[1] = chipId;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, READ_RESULT_LEN+DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -616,22 +640,20 @@ int Btc08ReadResult  (BTC08_HANDLE handle, uint8_t chipId, uint8_t* gn, uint8_t 
 	upper  = rx[0] & (1<<0);
 	validCnt = gn[1];
 
+#if DEBUG_RESULT
 	if (0 != lower3) {
-		NxDbgMsg(NX_DBG_INFO, " <== Lower_3 found golden nonce %02x %02x %02x %02x",
-			rx[2], rx[3], rx[4], rx[5]);
+		NxDbgMsg(NX_DBG_INFO, " <== Lower_3 found golden nonce %02x %02x %02x %02x", rx[2], rx[3], rx[4], rx[5]);
 	}
 	if (0 != lower2) {
-		NxDbgMsg(NX_DBG_INFO, " <== Lower_2 found golden nonce %02x %02x %02x %02x",
-			rx[6], rx[7], rx[8], rx[9]);
+		NxDbgMsg(NX_DBG_INFO, " <== Lower_2 found golden nonce %02x %02x %02x %02x", rx[6], rx[7], rx[8], rx[9]);
 	}
 	if (0 != lower) {
-		NxDbgMsg(NX_DBG_INFO, " <== Lower found golden nonce %02x %02x %02x %02x",
-			rx[10], rx[11], rx[12], rx[13]);
+		NxDbgMsg(NX_DBG_INFO, " <== Lower found golden nonce %02x %02x %02x %02x", rx[10], rx[11], rx[12], rx[13]);
 	}
 	if (0 != upper) {
-		NxDbgMsg(NX_DBG_INFO, " <== Upper found golden nonce %02x %02x %02x %02x",
-			rx[14], rx[15], rx[16], rx[17]);
+		NxDbgMsg(NX_DBG_INFO, " <== Upper found golden nonce %02x %02x %02x %02x", rx[14], rx[15], rx[16], rx[17]);
 	}
+#endif
 
 	return 0;
 }
@@ -642,6 +664,7 @@ int Btc08ClearOON    (BTC08_HANDLE handle, uint8_t chipId )
 	handle->txBuf[0] = SPI_CMD_CLEAR_OON;
 	handle->txBuf[1] = chipId;
 
+	_WriteDummy(handle, 2);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -662,6 +685,7 @@ int Btc08SetDisable  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *disable )
 	memcpy( handle->txBuf+txLen, disable, DISABLE_LEN );
 	txLen += DISABLE_LEN;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -680,6 +704,7 @@ int Btc08ReadDisable (BTC08_HANDLE handle, uint8_t chipId )
 	handle->txBuf[0] = SPI_CMD_READ_DISABLE;
 	handle->txBuf[1] = chipId;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DISABLE_LEN + DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -709,6 +734,7 @@ int Btc08SetControl  (BTC08_HANDLE handle, uint8_t chipId, uint32_t param )
 		NxDbgMsg(NX_DBG_INFO, " ==> Set OON IRQ Enable\n");
 	}
 
+	_WriteDummy(handle, 6);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2+4, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -724,6 +750,7 @@ int Btc08ReadTemp    (BTC08_HANDLE handle, uint8_t chipId )
 	handle->txBuf[0] = SPI_CMD_READ_TEMP;
 	handle->txBuf[1] = chipId;
 
+	_WriteDummy(handle, 2);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2, 2+DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -743,6 +770,7 @@ int Btc08WriteNonce  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *startNonce, 
 	memcpy(handle->txBuf + txLen, startNonce, NONCE_LEN);	txLen += NONCE_LEN;
 	memcpy(handle->txBuf + txLen, endNonce  , NONCE_LEN);	txLen += NONCE_LEN;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -760,6 +788,7 @@ int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId, uint8_t* hash, uint8_
 	handle->txBuf[0] = SPI_CMD_READ_HASH;
 	handle->txBuf[1] = chipId;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 128+DUMMY_BYTES) )
 	{
 		// SPI Error
@@ -781,6 +810,7 @@ int Btc08ReadFeature (BTC08_HANDLE handle, uint8_t chipId )
 	handle->txBuf[0] = SPI_CMD_READ_FEATURE;
 	handle->txBuf[1] = chipId;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 4+DUMMY_BYTES) )
 	{
 		// SPI Error
@@ -806,6 +836,7 @@ int Btc08ReadRevision(BTC08_HANDLE handle, uint8_t chipId )
 	handle->txBuf[0] = SPI_CMD_READ_REVISION;
 	handle->txBuf[1] = chipId;
 
+	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 4+DUMMY_BYTES) )
 	{
 		// SPI Error
@@ -827,6 +858,7 @@ int Btc08SetPllFoutEn(BTC08_HANDLE handle, uint8_t chipId, uint8_t fout)
 	handle->txBuf[2] = 0;
 	handle->txBuf[3] = (fout&1);
 
+	_WriteDummy(handle, 4);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2+2, DUMMY_BYTES ) )
 	{
 		// SPI Error
@@ -844,6 +876,7 @@ int Btc08SetPllResetB(BTC08_HANDLE handle, uint8_t chipId, uint8_t reset)
 	handle->txBuf[2] = 0;
 	handle->txBuf[3] = (reset&1);
 
+	_WriteDummy(handle, 4);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2+2, DUMMY_BYTES ) )
 	{
 		// SPI Error

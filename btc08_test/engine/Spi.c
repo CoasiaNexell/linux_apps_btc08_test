@@ -165,6 +165,8 @@ int SpiTransfer( SPI_HANDLE handle, uint8_t *tx, uint8_t *rx, int32_t txLen, int
 			tr.tx_buf = 0;
 	}
 
+	//HexDump("tx->", tx, len);
+
 	ret = ioctl(handle->fd, SPI_IOC_MESSAGE(1), &tr);
 	// ret: length of transmit message in bytes on success / -1 on error
 	if (ret == -1)
@@ -178,7 +180,7 @@ int SpiTransfer( SPI_HANDLE handle, uint8_t *tx, uint8_t *rx, int32_t txLen, int
 		rx[i] = rx[i] ^ 0xFF;
 	}
 
-	// HexDump(__FUNCTION__, rx, len);
+	//HexDump("rx<-", rx, len);
 
 	pthread_mutex_unlock( &handle->lock );
 

@@ -1,5 +1,11 @@
 #include <stdio.h>
+#include <strings.h>
 #include "TestFunction.h"
+#include "Utils.h"
+
+#include "SingleCommand.h"
+#include "SimpleWork.h"
+#include "ScenarioTest.h"
 
 // #define NX_DBG_OFF
 #ifdef NX_DTAG
@@ -8,54 +14,53 @@
 #define NX_DTAG "[MAIN]"
 #include "NX_DbgMsg.h"
 
-void print_command_list()
+static void l1_command_liist()
 {
-	printf("============================\n");
-	printf("  1. Auto Address \n");
-	printf("  2. Test Bist \n");
-	printf("  3. Test Work \n");
-	printf("  4. Test WorkLoop \n");
-	printf("  6. Start Temperature Monitor \n");
-	printf("  7. Stop Temperature Monitor \n");
-	printf("============================\n");
+	printf("\n\n");
+	printf("===== Main Command Loop =====\n");
+	printf("  1. Single Command\n");
+	printf("  2. Simple Work\n");
+	printf("  3. Scenario Test\n");
+	printf("-----------------------------\n");
+	printf("  q. quit\n");
+	printf("=============================\n");
 }
 
 int main( int argc, char *argv[] )
 {
-	int test_id;
+	static char cmdStr[NX_SHELL_MAX_ARG * NX_SHELL_MAX_STR];
+	static char cmd[NX_SHELL_MAX_ARG][NX_SHELL_MAX_STR];
+	int cmdCnt;
 	for( ;; )
 	{
-		print_command_list();
-		printf( "> " );
-		scanf("%d", &test_id);
-		if (test_id > 9) {
-			print_command_list();
+		l1_command_liist();
+		printf( "cmd > " );
+		fgets( cmdStr, NX_SHELL_MAX_ARG*NX_SHELL_MAX_STR - 1, stdin );
+		cmdCnt = Shell_GetArgument( cmdStr, cmd );
+
+		//----------------------------------------------------------------------
+		if( !strcasecmp(cmd[0], "q") )
+		{
+			printf("bye bye ~~\n");
 			break;
 		}
-
-		switch( test_id )
+		//----------------------------------------------------------------------
+		// Single Command
+		else if( !strcasecmp(cmd[0], "1") )
 		{
-			case 1:
-				ResetAutoAddress();
-				break;
-			case 2:
-				TestBist();
-				break;
-			case 3:
-				TestWork();
-				break;
-			case 4:
-				TestWorkLoop();
-				break;
-			case 6:
-				StartMonTempThread();
-				break;
-			case 7:
-				ShutdownMonTempThread();
-				break;
-			default:
-				printf("Unknown command = %d\n", test_id);
-				break;
+			SingleCommandLoop();
+		}
+		//----------------------------------------------------------------------
+		// Simple Work
+		else if( !strcasecmp(cmd[0], "2") )
+		{
+			SimpleWorkLoop();
+		}
+		//----------------------------------------------------------------------
+		// Scenario Test
+		else if( !strcasecmp(cmd[0], "3") )
+		{
+			ScenarioTestLoop();
 		}
 	}
 
