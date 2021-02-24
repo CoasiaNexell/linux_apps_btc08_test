@@ -26,6 +26,11 @@
 #define ASIC_BOOST_EN		(0x02)
 #define FIX_NONCE_MODE		(0x01)
 
+// SET_CONTROL Extra Bits
+#define LAST_CHIP		    (1<<15)
+#define OON_IRQ_EN		    (1<<4)
+#define UART_DIVIDER    	(0x03)
+
 #define MAX_JOB_FIFO_NUM	4
 #define MAX_JOB_ID			256
 #define MAX_CHIP_NUM		22
