@@ -20,6 +20,8 @@ static void singlecommand_command_list()
 	printf("  1. H/W Reset\n");
 	printf("  2. Reset and Auto Address \n");
 	printf("  3. Reset and TestBist\n");
+	printf("  4. Set the chip to the last chip\n");
+	printf("    ex > 4 [last_chipId(1~3)]\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -47,6 +49,36 @@ static int ResetAutoAddress( BTC08_HANDLE handle )
 	return 0;
 }
 
+void TestLastChip( BTC08_HANDLE handle, uint8_t last_chipId )
+{
+	int numChips;
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+
+	Btc08ResetHW( handle, 1 );
+	Btc08ResetHW( handle, 0 );
+
+	numChips = Btc08AutoAddress(handle);
+	NxDbgMsg( NX_DBG_INFO, "Number of Chips = %d\n", numChips );
+	for (int chipId = 1; chipId <= numChips; chipId++)
+	{
+		Btc08ReadId(handle, chipId, res, res_size);
+		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Number of jobs = %d\n",
+					"", chipId, (res[2]&7) );
+	}
+
+	NxDbgMsg( NX_DBG_INFO, "Set chipId #%d as the last chip\n", last_chipId );
+	Btc08SetControl(handle, last_chipId, LAST_CHIP);
+
+	numChips = Btc08AutoAddress(handle);
+	NxDbgMsg( NX_DBG_INFO, "Number of Chips = %d\n", numChips );
+	for (int chipId = 1; chipId <= numChips; chipId++)
+	{
+		Btc08ReadId(handle, chipId, res, res_size);
+		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Number of jobs = %d\n",
+					"", chipId, (res[2]&7) );
+	}
+}
 
 void TestBist( BTC08_HANDLE handle )
 {
@@ -145,6 +177,18 @@ void SingleCommandLoop(void)
 		else if( !strcasecmp(cmd[0], "3") )
 		{
 			TestBist( handle );
+		}
+		//----------------------------------------------------------------------
+		//	Set the chip as the last chip
+		else if (!strcasecmp(cmd[0], "4") )
+		{
+			int chipId = 1;
+			if( cmdCnt > 1 )
+			{
+				chipId = strtol(cmd[1], 0, 10);
+			}
+			printf("chipId = %d\n", chipId);
+			TestLastChip( handle, chipId );
 		}
 	}
 
