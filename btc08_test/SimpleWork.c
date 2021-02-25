@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <byteswap.h>
 #include <sched.h>
+#include <stdbool.h>
+
 #include "Utils.h"
 #include "Btc08.h"
 
@@ -37,6 +39,8 @@ static void RunBist( BTC08_HANDLE handle, int numChips )
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 
+	NxDbgMsg( NX_DBG_INFO, "=== RUN BIST ==\n");
+
 	Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
 
@@ -53,34 +57,42 @@ static void RunBist( BTC08_HANDLE handle, int numChips )
 			if ( (ret[0] & 1) == 0 )
 				break;
 			else
-				NxDbgMsg( NX_DBG_INFO, "ChipId = %d, Status = %s, Number of cores = %d\n",
+				NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
 						chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
 
 			usleep( 300 );
 		}
 		ret = Btc08ReadBist(handle, chipId);
 		numCores[chipId] = ret[1];
-		NxDbgMsg( NX_DBG_INFO, "ChipId = %d, Status = %s, Number of cores = %d\n",
+		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
 					chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
 	}
 	for (int chipId = 1; chipId <= numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
-		NxDbgMsg( NX_DBG_INFO, "ChipId = %d, Number of jobs = %d\n",
+		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Number of jobs = %d\n", "",
 					chipId, (res[2]&7) );
 	}
 }
 
-static uint32_t calRealGN(const uint8_t chipId, const uint8_t *in, const uint8_t valid_cnt)
+static uint32_t calRealGN(const uint8_t chipId, uint32_t *in, const uint8_t valid_cnt)
 {
-	uint32_t *gn = (uint32_t *)in;
+	uint32_t *gn = in;
 
-	*gn = bswap_32(*gn);
-
-	NxDbgMsg(NX_DBG_DEBUG, "in[0x%08x] swap[0x%08x] cal[0x%08x] \n",
-			in, gn, (*gn - valid_cnt * numCores[chipId]));
+	NxDbgMsg(NX_DBG_INFO, "gn[0x%08x] cal[0x%08x] \n",
+			*gn, (*gn - valid_cnt * numCores[chipId]));
 
 	return (*gn - valid_cnt * numCores[chipId]);
+}
+
+/* 0x12345678 --> 0x56781234*/
+static inline void swap16_(void *dest_p, const void *src_p)
+{
+	uint32_t *dest = dest_p;
+	const uint32_t *src = src_p;
+
+	*dest =     ((*src & 0xFF) << 16) |     ((*src & 0xFF00) << 16) |
+			((*src & 0xFF0000) >> 16) | ((*src & 0xFF000000) >> 16);
 }
 
 static int handleGN(BTC08_HANDLE handle, uint8_t chipId)
@@ -88,29 +100,72 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId)
 	int ret = 0;
 	uint8_t hash[128] = {0x00,};
 	unsigned int hash_size = sizeof(hash)/sizeof(hash[0]);
-	uint8_t gn[18] = {0x00,};
-	unsigned int gn_size = sizeof(gn)/sizeof(gn[0]);
-	uint8_t lower3, lower2, lower, upper, validCnt;
+	uint8_t res[18] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	bool lower3, lower2, lower, upper, validCnt;
 	int match;
+	uint32_t cal_gn;
+	uint32_t *res_32;
+	uint32_t swap16[4];
+	uint32_t nonce32[4];
+	uint32_t *default_gn = (uint32_t *)golden_nonce;	// default gn: 0x66 0xcb 0x34 0x26 ==> 0x2634cb66
 
-	// Read Hash
+	// Sequence 1. Read Hash
 	Btc08ReadHash(handle, chipId, hash, hash_size);
-
-	// Read Result to read GN and clear GN IRQ
-	Btc08ReadResult(handle, chipId, gn, gn_size);
-	validCnt = gn[1];
-
-	for (int i=0; i<16; i+=4)
+	for (int i=0; i<4; i++)
 	{
-		uint32_t cal_gn = calRealGN(chipId, &(gn[2+i]), validCnt);
-		if (cal_gn == 0x66cb3426)
+		ret = memcmp(default_golden_hash, &(hash[i*32]), 32);
+		if (ret == 0)
+			NxDbgMsg(NX_DBG_INFO, "%5s Hash matched of Inst_%s!!!\n", "",
+					(i==0) ? "Lower_3":(((i==1) ? "Lower_2": ((i==2) ? "Lower":"Upper"))));
+		else if (ret < 0)
+			NxDbgMsg(NX_DBG_INFO, "%5s golden hash is %s found hash of Inst_%s\n", "",
+					(i==0) ? "Lower_3":(((i==1) ? "Lower_2": ((i==2) ? "Lower":"Upper"))),
+					(ret < 0) ? "less than":"greater than");
+	}
+
+	// Sequence 2. Read Result to read GN and clear GN IRQ
+	Btc08ReadResult(handle, chipId, res, res_size);
+	lower3 = ((res[0] & (1<<3)) != 0);
+	lower2 = ((res[0] & (1<<2)) != 0);
+	lower  = ((res[0] & (1<<1)) != 0);
+	upper  = ((res[0] & (1<<0)) != 0);
+	validCnt = res[1];
+
+	NxDbgMsg(NX_DBG_DEBUG, "%s %s %s %s found golden nonce\n",
+			lower3 ? "Inst_Lower_3,":"", lower2 ? "Inst_Lower_2,":"",
+			lower  ?   "Inst_Lower,":"", upper  ?   "Inst_Upper":"");
+	for (int i=0; i<16; i+=4) {
+		for (int j=0; j<4; j++) NxDbgMsg(NX_DBG_DEBUG, "res[%d]=0x%02x \n", (2+i+j), res[2+i+j]);
+	}
+
+	res_32 = (uint32_t *)&(res[2]);		// res_32[0]: 0xcb662634
+
+	for (int i=0; i<4; i++)
+	{
+		if (0 != res_32[i])
 		{
-			NxDbgMsg(NX_DBG_INFO, "Inst_%s found golden nonce 0x%08x \n",
-					(i==0) ? "Lower_3":(((i==4) ? "Lower_2": ((i==8) ? "Lower":"Upper"))),
-					cal_gn);
-			ret = 1;
+			/*  res[2]=0x34,  res[3]=0x26,  res[4]=0x66,  res[5]=0xcb  ...
+			 * res[14]=0x34, res[15]=0x26, res[16]=0x00, res[17]=0x0f
+			 * ==> nonce32[0]=0xcb662634 ... nonce32[3]=0x0f002634         */
+			nonce32[i] = res_32[i];
+			swap16_(&nonce32[i], &res_32[i]);
+			// TODO: Check if it needs to compare the calculated gn with the default/real gn
+			// calRealGN(chipId, &(nonce32[i]), validCnt);
+			if (nonce32[i] == *default_gn)
+			{
+				NxDbgMsg(NX_DBG_INFO, "%5s GN Matched!!! %10s Inst_%s found GN 0x%08x \n", "",
+					(i==0) ? "Lower_3":(((i==1) ? "Lower_2": ((i==2) ? "Lower":"Upper"))),
+					"", nonce32[i]);
+			}
+			else
+			{
+				NxDbgMsg(NX_DBG_ERR, "%5s GN not Matched!!! %21s 0x%08x\n", "", "", nonce32[i]);
+				ret = -1;
+			}
 		}
 	}
+
 	return ret;
 }
 
@@ -234,6 +289,8 @@ static void TestWork()
 	// Sequence 10. Setting Nonce Range
 	Btc08WriteNonce(handle, BCAST_CHIP_ID, start_nonce, end_nonce);
 
+	NxDbgMsg( NX_DBG_INFO, "=== RUN JOB ==\n");
+
 	// Sequence 11. Run Job
 	Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
 
@@ -252,7 +309,7 @@ static void TestWork()
 			if (0 != gn_irq) {				// In case of GN
 				// Check if found GN(0x66cb3426) is correct and submit nonce to pool server and then go loop again
 				tstimer_time(&ts_gn);
-				NxDbgMsg(NX_DBG_INFO, "[%ld.%lds] GN on chip#%d!!!\n", ts_gn.tv_sec, ts_gn.tv_nsec, chipId);
+				NxDbgMsg(NX_DBG_INFO, "[%ld.%lds] GN IRQ on chip#%d!!!\n", ts_gn.tv_sec, ts_gn.tv_nsec, chipId);
 
 				handleGN(handle, chipId);
 			} else {						// In case of not GN
@@ -269,7 +326,7 @@ static void TestWork()
 
 			if (0 != oon_irq) {		// In case of OON
 				tstimer_time(&ts_oon);
-				NxDbgMsg(NX_DBG_INFO, "[%ld.%lds] OON on chip#%d!!!\n", ts_oon.tv_sec, ts_oon.tv_nsec, chipId);
+				NxDbgMsg(NX_DBG_INFO, "[%ld.%lds] OON IRQ on chip#%d!!!\n", ts_oon.tv_sec, ts_oon.tv_nsec, chipId);
 
 				handleOON(handle);
 				break;
@@ -360,10 +417,11 @@ static void TestWorkLoop(int numWorks)
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
 	Btc08WriteNonce(handle, BCAST_CHIP_ID, start_nonce, end_nonce);
 
+	NxDbgMsg( NX_DBG_INFO, "=== RUN JOB ==\n");
 	// Sequence 9. Run job
 	for (int i = 0; i < MAX_JOB_FIFO_NUM; i++)
 	{
-		NxDbgMsg(NX_DBG_INFO, "JobId = %d\n", jobId);
+		NxDbgMsg(NX_DBG_INFO, "Run Job with jobId = %d\n", jobId);
 		Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
 		jobcnt++;
 	}
@@ -379,7 +437,7 @@ static void TestWorkLoop(int numWorks)
 			if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
 				// Check if found GN(0x66cb3426) is correct and submit nonce to pool server and then go loop again
 				tstimer_time(&ts_gn);
-				NxDbgMsg(NX_DBG_INFO, "[%ld.%lds] GN on chip#%d!!!\n", ts_gn.tv_sec, ts_gn.tv_nsec, res[3]);
+				NxDbgMsg(NX_DBG_INFO, "[%ld.%lds] GN IRQ on chip#%d!!!\n", ts_gn.tv_sec, ts_gn.tv_nsec, res[3]);
 
 				handleGN(handle, chipId);
 			} else {				// If GN IRQ is not set, then go to check OON
@@ -396,7 +454,7 @@ static void TestWorkLoop(int numWorks)
 
 			if (1 != oon_irq) {				// If OON IRQ is set, handle OON
 				tstimer_time(&ts_oon);
-				NxDbgMsg(NX_DBG_INFO, "[%ld.%lds] OON on chip#%d!!!\n", ts_oon.tv_sec, ts_oon.tv_nsec, chipId);
+				NxDbgMsg(NX_DBG_INFO, "[%ld.%lds] OON IRQ on chip#%d!!!\n", ts_oon.tv_sec, ts_oon.tv_nsec, chipId);
 
 				handleOON(handle);
 

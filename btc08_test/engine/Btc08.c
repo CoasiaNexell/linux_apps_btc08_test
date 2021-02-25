@@ -638,20 +638,20 @@ int Btc08ReadResult  (BTC08_HANDLE handle, uint8_t chipId, uint8_t* gn, uint8_t 
 	lower2 = rx[0] & (1<<2);
 	lower  = rx[0] & (1<<1);
 	upper  = rx[0] & (1<<0);
-	validCnt = gn[1];
+	validCnt = rx[1];
 
 #if DEBUG_RESULT
 	if (0 != lower3) {
-		NxDbgMsg(NX_DBG_INFO, " <== Lower_3 found golden nonce %02x %02x %02x %02x", rx[2], rx[3], rx[4], rx[5]);
+		NxDbgMsg(NX_DBG_INFO, " <== Inst_Lower_3 found golden nonce %02x %02x %02x %02x \n", rx[2], rx[3], rx[4], rx[5]);
 	}
 	if (0 != lower2) {
-		NxDbgMsg(NX_DBG_INFO, " <== Lower_2 found golden nonce %02x %02x %02x %02x", rx[6], rx[7], rx[8], rx[9]);
+		NxDbgMsg(NX_DBG_INFO, " <== Inst_Lower_2 found golden nonce %02x %02x %02x %02x \n", rx[6], rx[7], rx[8], rx[9]);
 	}
 	if (0 != lower) {
-		NxDbgMsg(NX_DBG_INFO, " <== Lower found golden nonce %02x %02x %02x %02x", rx[10], rx[11], rx[12], rx[13]);
+		NxDbgMsg(NX_DBG_INFO, " <== Inst_Lower found golden nonce %02x %02x %02x %02x \n", rx[10], rx[11], rx[12], rx[13]);
 	}
 	if (0 != upper) {
-		NxDbgMsg(NX_DBG_INFO, " <== Upper found golden nonce %02x %02x %02x %02x", rx[14], rx[15], rx[16], rx[17]);
+		NxDbgMsg(NX_DBG_INFO, " <== Inst_Upper found golden nonce %02x %02x %02x %02x \n", rx[14], rx[15], rx[16], rx[17]);
 	}
 #endif
 
@@ -725,6 +725,7 @@ int Btc08SetControl  (BTC08_HANDLE handle, uint8_t chipId, uint32_t param )
 	handle->txBuf[4] = (uint8_t)((param>> 8)&0xff);
 	handle->txBuf[5] = (uint8_t)((param>> 0)&0xff);
 
+#if DEBUG_RESULT
 	if (handle->txBuf[4] & LAST_CHIP_FLAG)
 	{
 		NxDbgMsg(NX_DBG_INFO, " ==> Set a last chip (chip_id %d)\n", chipId);
@@ -733,6 +734,7 @@ int Btc08SetControl  (BTC08_HANDLE handle, uint8_t chipId, uint32_t param )
 	{
 		NxDbgMsg(NX_DBG_INFO, " ==> Set OON IRQ Enable\n");
 	}
+#endif
 
 	_WriteDummy(handle, 6);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2+4, DUMMY_BYTES ) )
