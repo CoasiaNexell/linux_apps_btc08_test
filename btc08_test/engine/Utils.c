@@ -76,7 +76,7 @@ void tstimer_diff(struct timespec *end, struct timespec *start, struct timespec 
 		res->tv_nsec += 1000000000;
 		res->tv_sec--;
 	}
-	printf("time diff: %3ld.%03lds\n", res->tv_sec, res->tv_nsec);
+	//printf("time diff: %3ld.%03lds\n", res->tv_sec, res->tv_nsec);
 }
 
 // get current time in ms unit

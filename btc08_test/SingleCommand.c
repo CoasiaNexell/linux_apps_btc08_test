@@ -215,12 +215,12 @@ void TestBist( BTC08_HANDLE handle )
 
 	NxDbgMsg( NX_DBG_INFO, "=== AUTO ADDRESS ==\n");
 	numChips = Btc08AutoAddress(handle);
-	NxDbgMsg(NX_DBG_INFO, "Number of Chips = %d\n", numChips);
+	NxDbgMsg(NX_DBG_INFO, "%5s Number of Chips = %d\n", "", numChips);
 	for (int chipId = 1; chipId <= numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
-		NxDbgMsg( NX_DBG_INFO, "ChipId = %d, Number of jobs = %d\n",
-					chipId, (res[2]&7) );
+		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Number of jobs = %d\n",
+					"", chipId, (res[2]&7) );
 	}
 
 	// Software reset (TODO: Check FIFO status if it's empty)
