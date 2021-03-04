@@ -33,7 +33,7 @@ static void simplework_command_list()
 	printf("=============================\n");
 }
 
-static void RunBist( BTC08_HANDLE handle, int numChips )
+static void RunBist( BTC08_HANDLE handle)
 {
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
@@ -49,7 +49,7 @@ static void RunBist( BTC08_HANDLE handle, int numChips )
 	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
 	Btc08RunBist    (handle, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
 
-	for (int chipId = 1; chipId <= numChips; chipId++)
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		// If it's not BUSY status, read the number of cores in next READ_BIST
 		for (int i=0; i<10; i++) {
@@ -63,11 +63,11 @@ static void RunBist( BTC08_HANDLE handle, int numChips )
 			usleep( 300 );
 		}
 		ret = Btc08ReadBist(handle, chipId);
-		numCores[chipId] = ret[1];
+		handle->numCores[chipId-1] = ret[1];
 		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
 					chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
 	}
-	for (int chipId = 1; chipId <= numChips; chipId++)
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
 		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Number of jobs = %d\n", "",
@@ -230,7 +230,6 @@ static int handleOON(BTC08_HANDLE handle)
 
 static void TestWork()
 {
-	int numChips;
 	int chipId = 0x00, jobId=0x01;
 	struct timespec ts_start, ts_oon, ts_gn, ts_diff;
 	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00;
@@ -248,9 +247,9 @@ static void TestWork()
 	Btc08ResetHW(handle, 0);
 
 	// Seqeunce 2. Find number of chips : using AutoAddress
-	numChips = Btc08AutoAddress(handle);
-	NxDbgMsg(NX_DBG_DEBUG, "%5s Number of Chips = %d\n", "", numChips);
-	for (int chipId = 1; chipId <= numChips; chipId++)
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_DEBUG, "%5s Number of Chips = %d\n", "", handle->numChips);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
 		NxDbgMsg( NX_DBG_DEBUG, "%5s ChipId = %d, Number of jobs = %d\n",
@@ -262,9 +261,9 @@ static void TestWork()
 
 	// Sequence 4. Set last chip
 	Btc08SetControl(handle, 1, LAST_CHIP);
-	numChips = Btc08AutoAddress(handle);
-	NxDbgMsg(NX_DBG_INFO, "%5s Number of Chips = %d\n", "", numChips);
-	for (int chipId = 1; chipId <= numChips; chipId++)
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "%5s Number of Chips = %d\n", "", handle->numChips);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
 		NxDbgMsg( NX_DBG_DEBUG, "%5s ChipId = %d, Number of jobs = %d\n",
@@ -275,7 +274,7 @@ static void TestWork()
 	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
 
 	// Seqeunce 6. Run BIST
-	RunBist( handle, numChips );
+	RunBist( handle );
 
 	//
 	// RUN_JOB for one work without asicboost  : Please FIXME
@@ -338,9 +337,7 @@ static void TestWork()
 				break;
 			} else {				// In case of not OON
 				NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set!\n", "");
-				// if oon timeout is expired, disable chips
-				// if oon timeout is not expired, check oon gpio again
-				break;
+				// if oon timeTestWorkLoop_JobDist
 			}
 		}
 		sched_yield();
@@ -360,7 +357,6 @@ static void TestWork()
  */
 static void TestWorkLoop(int numWorks)
 {
-	int numChips;
 	uint8_t chipId = 0x00, jobId = 0x01, jobcnt = 0x01;
 	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00;
 	uint8_t res[4] = {0x00,};
@@ -381,9 +377,9 @@ static void TestWorkLoop(int numWorks)
 	Btc08ResetHW(handle, 0);
 
 	// Seqeunce 2. Find number of chips : using AutoAddress
-	numChips = Btc08AutoAddress(handle);
-	NxDbgMsg(NX_DBG_INFO, "(Before last chip) Number of Chips = %d\n", numChips);
-	for (int chipId = 1; chipId <= numChips; chipId++)
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "(Before last chip) Number of Chips = %d\n", handle->numChips);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
 #if DEBUG
@@ -397,9 +393,9 @@ static void TestWorkLoop(int numWorks)
 
 	// Sequence 4. Set last chip
 	Btc08SetControl(handle, 1, LAST_CHIP);
-	numChips = Btc08AutoAddress(handle);
-	NxDbgMsg(NX_DBG_INFO, "(After last chip) Number of Chips = %d\n", numChips);
-	for (int chipId = 1; chipId <= numChips; chipId++)
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "(After last chip) Number of Chips = %d\n", handle->numChips);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
 #if DEBUG
@@ -412,7 +408,7 @@ static void TestWorkLoop(int numWorks)
 	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
 
 	// Seqeunce 6. Find number of cores of individual chips
-	RunBist( handle, numChips );
+	RunBist( handle );
 
 	// Sequence 7. Enable OON IRQ/Set UART divider
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
@@ -430,6 +426,187 @@ static void TestWorkLoop(int numWorks)
 	{
 		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId = %d\n", "", jobId);
 		Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+		jobcnt++;
+	}
+
+	while(1)
+	{
+		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_GN))	// Check GN GPIO pin
+		{
+			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
+			gn_irq 	  = res[2] & (1<<0);
+			chipId    = res[3];
+
+			if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
+				// Check if found GN(0x66cb3426) is correct and submit nonce to pool server and then go loop again
+				tstimer_time(&ts_gn);
+				NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d!!! === [%ld.%lds]\n", "", chipId, ts_gn.tv_sec, ts_gn.tv_nsec);
+
+				handleGN(handle, chipId);
+			} else {				// If GN IRQ is not set, then go to check OON
+				NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!\n", "");
+			}
+		}
+
+		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
+		{
+			// TODO: Need to check if it needs to read job id
+			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
+			oon_irq	  = res[2] & (1<<1);
+			chipId    = res[3];
+
+			if (0 != oon_irq) {				// If OON IRQ is set, handle OON
+				tstimer_time(&ts_oon);
+				NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ on chip#%d!!! === [%ld.%lds]\n", "", chipId, ts_oon.tv_sec, ts_oon.tv_nsec);
+
+				handleOON(handle);
+
+				if (numWorks >= jobcnt)
+				{
+					NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId = %d\n", "", jobId);
+					Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+					jobcnt++;
+					if (jobId > MAX_JOB_ID)		// [7:0] job id ==> 8bits (max 256)
+						jobId = 1;
+				}
+				else {
+					break;
+				}
+			} else {						// OON IRQ is not set (cgminer: check OON timeout is expired)
+				NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set! ===\n", "");
+				// if oon timeout is expired, disable chips
+				// if oon timeout is not expired, check oon gpio again
+			}
+		}
+
+		sched_yield();
+	}
+
+	tstimer_diff(&ts_oon, &ts_start, &ts_diff);
+	NxDbgMsg(NX_DBG_INFO, "Total works = %d [%ld.%lds]\n", (jobcnt-1), ts_diff.tv_sec, ts_diff.tv_nsec);
+
+	DestroyBtc08( handle );
+}
+
+/* Process 4 works with asicboost at first.
+ * If OON IRQ occurs, clear OON and then pass the additional work to job fifo.
+ * If GN IRQ occurs, read GN and then clear GN IRQ.
+ */
+//	Job Distribution (nonce)
+
+static void DistributionNonce( BTC08_HANDLE handle )
+{
+	int ii;
+	uint32_t totalCores = 0;
+	uint32_t noncePerCore;
+	for( int i=0 ; i<handle->numChips ; i++ )
+	{
+		totalCores += handle->numCores[i];
+	}
+	NxDbgMsg( NX_DBG_INFO, "Total Cores = %d\n", totalCores );
+
+	noncePerCore = 0xffffffff / totalCores;
+	handle->startNonce[0] = 0;
+	for( ii=0 ; ii<handle->numChips-1 ; ii++ ) {
+		handle->endNonce[ii] = handle->startNonce[ii] + (noncePerCore*handle->numCores[ii]);
+		handle->startNonce[ii+1] = handle->endNonce[ii]+1;
+	}
+	handle->endNonce[ii]=0xffffffff;
+
+}
+static void TestWorkLoop_JobDist(int numWorks)
+{
+	int ii;
+	uint8_t chipId = 0x00, jobId = 0x01, jobcnt = 0x01;
+	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00;
+	uint8_t res[4] = {0x00,};
+	uint8_t oon_jobid, gn_jobid;
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+
+	uint8_t start_nonce[4] = { 0x50, 0x00, 0x00, 0x00 };
+	uint8_t end_nonce[4]   = { 0x6f, 0xff, 0xff, 0xff };
+	struct timespec ts_start, ts_oon, ts_gn, ts_diff;
+
+	VECTOR_DATA data;
+
+	tstimer_time(&ts_start);
+	NxDbgMsg(NX_DBG_INFO, "=== Start workloop === [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
+
+	// Seqeunce 1. Create Handle
+	BTC08_HANDLE handle = CreateBtc08(0);
+
+	Btc08ResetHW(handle, 1);
+	Btc08ResetHW(handle, 0);
+
+	// Seqeunce 2. Find number of chips : using AutoAddress
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "(Before last chip) Number of Chips = %d\n", handle->numChips);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	{
+		Btc08ReadId(handle, chipId, res, res_size);
+#if DEBUG
+		NxDbgMsg( NX_DBG_DEBUG, "ChipId = %d, Number of jobs = %d\n",
+					chipId, (res[2]&7) );
+#endif
+	}
+
+	// Sequence 3. Reset S/W
+	Btc08Reset(handle);
+
+	// Sequence 4. Set last chip
+	Btc08SetControl(handle, 1, LAST_CHIP);
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "(After last chip) Number of Chips = %d\n", handle->numChips);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	{
+		Btc08ReadId(handle, chipId, res, res_size);
+#if DEBUG
+		NxDbgMsg( NX_DBG_DEBUG, "ChipId = %d, Number of jobs = %d\n",
+					chipId, (res[2]&7) );
+#endif
+	}
+
+	// Sequence 5. Enable all cores
+	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
+
+	// Seqeunce 6. Find number of cores of individual chips
+	RunBist( handle );
+	DistributionNonce(handle);		//	Distribution Nonce
+
+	// Sequence 7. Enable OON IRQ/Set UART divider
+	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
+
+	GetGoldenVector(0, &data);
+
+	// Sequence 8. Setting parameters, target, nonce range
+	Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
+	Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
+
+	for( int i=0; i<handle->numChips ; i++ )
+	{
+		NxDbgMsg( NX_DBG_INFO, "Chip[%d:%d] : 0x%08x ~ 0x%08x\n", i, handle->numCores[i], handle->startNonce[i], handle->endNonce[i] );
+		start_nonce[0] = (handle->startNonce[i]>>24) & 0xff;
+		start_nonce[1] = (handle->startNonce[i]>>16) & 0xff;
+		start_nonce[2] = (handle->startNonce[i]>>8 ) & 0xff;
+		start_nonce[3] = (handle->startNonce[i]>>0 ) & 0xff;
+		end_nonce[0]   = (handle->endNonce[i]>>24) & 0xff;
+		end_nonce[1]   = (handle->endNonce[i]>>16) & 0xff;
+		end_nonce[2]   = (handle->endNonce[i]>>8 ) & 0xff;
+		end_nonce[3]   = (handle->endNonce[i]>>0 ) & 0xff;
+		// HexDump("Start Nonce", start_nonce, sizeof(start_nonce));
+		// HexDump("End Nonce", end_nonce, sizeof(end_nonce));
+		Btc08WriteNonce(handle, i+1, start_nonce, end_nonce);
+	}
+
+	tstimer_time(&ts_start);
+	NxDbgMsg( NX_DBG_INFO, "=== RUN JOB === [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
+
+	// Sequence 9. Run job
+	for (int i = 0; i < MAX_JOB_FIFO_NUM; i++)
+	{
+		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId = %d\n", "", jobId);
+		Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+	// fifo status
 		jobcnt++;
 	}
 
@@ -525,6 +702,11 @@ void SimpleWorkLoop(void)
 			}
 			printf("numWork = %d\n", numWork);
 			TestWorkLoop( numWork );
+		}
+		//----------------------------------------------------------------------
+		else if( !strcasecmp(cmd[0], "3") )
+		{
+			TestWorkLoop_JobDist( 50000 );
 		}
 	}
 }

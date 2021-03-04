@@ -21,6 +21,8 @@
 #define _BTC08_H_
 
 #include <stdint.h>
+#include <GpioControl.h>
+#include <Spi.h>
 
 #define BCAST_CHIP_ID		0x00
 #define ASIC_BOOST_EN		(0x02)
@@ -37,6 +39,27 @@
 
 
 typedef struct tag_BTC08_INFO *BTC08_HANDLE;
+
+#define	SPI_MAX_TRANS	(1024)
+#define MAX_CHIPS		(64)
+#define MAX_CORES		(255)
+
+struct tag_BTC08_INFO{
+	GPIO_HANDLE		hReset;
+	GPIO_HANDLE		hGn;
+	GPIO_HANDLE		hOon;
+	SPI_HANDLE		hSpi;
+
+	int32_t			numChips;
+	int32_t			numCores[MAX_CHIPS];
+
+	int32_t			startNonce[MAX_CHIPS];
+	int32_t			endNonce[MAX_CHIPS];
+
+	uint8_t			txBuf[SPI_MAX_TRANS];
+	uint8_t			rxBuf[SPI_MAX_TRANS];
+};
+
 typedef enum {
     GPIO_TYPE_OON,
     GPIO_TYPE_GN,

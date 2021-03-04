@@ -21,8 +21,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "Spi.h"
-#include "GpioControl.h"
 #include "Btc08.h"
 #include "Utils.h"
 
@@ -132,18 +130,6 @@ static struct pll_conf pll_sets[] = {
 	{ 900, {6, 450, 0, 0, 1, 0, 0, 0, 0, 0}},
 	{ 950, {6, 475, 0, 0, 1, 0, 0, 0, 0, 0}},
 	{1000, {6, 500, 0, 0, 1, 0, 0, 0, 0, 0}},
-};
-
-
-#define	SPI_MAX_TRANS	(1024)
-
-struct tag_BTC08_INFO{
-	GPIO_HANDLE		hReset;
-	GPIO_HANDLE		hGn;
-	GPIO_HANDLE		hOon;
-	SPI_HANDLE		hSpi;
-	uint8_t			txBuf[SPI_MAX_TRANS];
-	uint8_t			rxBuf[SPI_MAX_TRANS];
 };
 
 
