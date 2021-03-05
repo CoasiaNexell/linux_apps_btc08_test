@@ -500,6 +500,8 @@ static void DistributionNonce( BTC08_HANDLE handle )
 	int ii;
 	uint32_t totalCores = 0;
 	uint32_t noncePerCore;
+	uint32_t startNonce, endNonce;
+
 	for( int i=0 ; i<handle->numChips ; i++ )
 	{
 		totalCores += handle->numCores[i];
@@ -507,13 +509,29 @@ static void DistributionNonce( BTC08_HANDLE handle )
 	NxDbgMsg( NX_DBG_INFO, "Total Cores = %d\n", totalCores );
 
 	noncePerCore = 0xffffffff / totalCores;
-	handle->startNonce[0] = 0;
+	startNonce = 0;
 	for( ii=0 ; ii<handle->numChips-1 ; ii++ ) {
-		handle->endNonce[ii] = handle->startNonce[ii] + (noncePerCore*handle->numCores[ii]);
-		handle->startNonce[ii+1] = handle->endNonce[ii]+1;
+		endNonce = startNonce + (noncePerCore*handle->numCores[ii]);
+		{
+			handle->startNonce[ii][0] = (startNonce>>24) & 0xff;
+			handle->startNonce[ii][1] = (startNonce>>16) & 0xff;
+			handle->startNonce[ii][2] = (startNonce>>8 ) & 0xff;
+			handle->startNonce[ii][3] = (startNonce>>0 ) & 0xff;
+			handle->endNonce[ii][0]   = (endNonce>>24) & 0xff;
+			handle->endNonce[ii][1]   = (endNonce>>16) & 0xff;
+			handle->endNonce[ii][2]   = (endNonce>>8 ) & 0xff;
+			handle->endNonce[ii][3]   = (endNonce>>0 ) & 0xff;
+		}
+		startNonce = endNonce + 1;
 	}
-	handle->endNonce[ii]=0xffffffff;
-
+	handle->startNonce[ii][0] = (startNonce>>24) & 0xff;
+	handle->startNonce[ii][1] = (startNonce>>16) & 0xff;
+	handle->startNonce[ii][2] = (startNonce>>8 ) & 0xff;
+	handle->startNonce[ii][3] = (startNonce>>0 ) & 0xff;
+	handle->endNonce[ii][0] = 0xff;
+	handle->endNonce[ii][1] = 0xff;
+	handle->endNonce[ii][2] = 0xff;
+	handle->endNonce[ii][3] = 0xff;
 }
 
 static void FindNextTimeStamp( uint8_t *param )
@@ -640,18 +658,10 @@ static void TestWorkLoop_RandomVector()
 
 	for( int i=0; i<handle->numChips ; i++ )
 	{
-		NxDbgMsg( NX_DBG_INFO, "Chip[%d:%d] : 0x%08x ~ 0x%08x\n", i, handle->numCores[i], handle->startNonce[i], handle->endNonce[i] );
-		start_nonce[0] = (handle->startNonce[i]>>24) & 0xff;
-		start_nonce[1] = (handle->startNonce[i]>>16) & 0xff;
-		start_nonce[2] = (handle->startNonce[i]>>8 ) & 0xff;
-		start_nonce[3] = (handle->startNonce[i]>>0 ) & 0xff;
-		end_nonce[0]   = (handle->endNonce[i]>>24) & 0xff;
-		end_nonce[1]   = (handle->endNonce[i]>>16) & 0xff;
-		end_nonce[2]   = (handle->endNonce[i]>>8 ) & 0xff;
-		end_nonce[3]   = (handle->endNonce[i]>>0 ) & 0xff;
-		// HexDump("Start Nonce", start_nonce, sizeof(start_nonce));
-		// HexDump("End Nonce", end_nonce, sizeof(end_nonce));
-		Btc08WriteNonce(handle, i+1, start_nonce, end_nonce);
+		NxDbgMsg( NX_DBG_INFO, "Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n", i, handle->numCores[i], 
+			handle->startNonce[i][0], handle->startNonce[i][1], handle->startNonce[i][2], handle->startNonce[i][3],
+			handle->endNonce[i][0], handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3] );
+		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
 	}
 
 	NxDbgMsg( NX_DBG_INFO, "=== RUN JOB ===\n");
@@ -665,7 +675,6 @@ static void TestWorkLoop_RandomVector()
 		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId = %d\n", "", jobId);
 		Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
 		FindNextTimeStamp( data.parameter );
-
 		Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
 	}
 

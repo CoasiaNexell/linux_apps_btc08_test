@@ -13,6 +13,7 @@ btc08_test_SOURCES = \
 	engine/Btc08.c \
 	engine/Utils.c \
 	engine/NX_Queue.c \
+	engine/NX_Semaphore.c \
 	engine/sha2.c \
 	SingleCommand.c \
 	SimpleWork.c \

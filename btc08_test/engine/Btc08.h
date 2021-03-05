@@ -41,7 +41,7 @@
 typedef struct tag_BTC08_INFO *BTC08_HANDLE;
 
 #define	SPI_MAX_TRANS	(1024)
-#define MAX_CHIPS		(64)
+#define MAX_CHIPS		(32)
 #define MAX_CORES		(255)
 
 struct tag_BTC08_INFO{
@@ -53,8 +53,8 @@ struct tag_BTC08_INFO{
 	int32_t			numChips;
 	int32_t			numCores[MAX_CHIPS];
 
-	int32_t			startNonce[MAX_CHIPS];
-	int32_t			endNonce[MAX_CHIPS];
+	uint8_t			startNonce[MAX_CHIPS][4];
+	uint8_t			endNonce[MAX_CHIPS][4];
 
 	uint8_t			txBuf[SPI_MAX_TRANS];
 	uint8_t			rxBuf[SPI_MAX_TRANS];

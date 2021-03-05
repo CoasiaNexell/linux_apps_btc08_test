@@ -6,6 +6,8 @@
 #include <byteswap.h>
 #include "Utils.h"
 #include "Btc08.h"
+#include "NX_Queue.h"
+#include "NX_Semaphore.h"
 
 #include "TestVector.h"
 #include "TempCtrl.h"
@@ -30,17 +32,42 @@ static void simplework_command_list()
 	printf("=============================\n");
 }
 
+
+
+//
+//	Description:
+//	1. Loops (Thread)
+//		a. Main Loop : Console ( start/stop/quit )
+//		b. Command Porcessing Loop
+//		c. Monitoring Loop
+//		d. Mining Loop
+//
+//	2. Main Loop
+//		- 서비스를 control하는 역할을 한다.
+//		- 기본적으로 start/stop/quit 만 처리한다.
+//		- Start Command의 경우 모든 부차적인 loop를 생성하고 Mining을 하게 한다.
+//
+//	3. Command Processing Loop
+//		- Service 실행 도중에 필요한 command를 처리하는 loop이다.
+//		- 실질적인 loop 상에서는 command queue를 check 하여 command가 존재하면 해당 command 를 수행하게 된다.
+//
+//	4. Monitoring Loop
+//		- 전체적으로 system에 영향을 줄 수 있는 값들을 check 하여 필요에 따라서 command 를 발생한다.
+//		- 현재 system에 영향을 줄수 있는 요인은 온도가 있고 여기서는 온도만을 check 할 것이다.
+//
+//	5. Mining Loop
+//		- Mining을 하는 loop로 Job 을 생성하는 루프와 실제 Mining을 하는 Loop로 나뉜다.
+//
+
+
 typedef struct SEVICE_INFO {
-	BTC08_HANDLE hBtc08;
-	int numChips;
-	int numCores[MAX_CHIP_NUM];
 
 	int bExitWorkLoop;
 	int bExitMonitorLoop;
 
 	//	Work Related Param
 	uint64_t totalJobCnt;
-	uint8_t jobId;						//	1 ~ 255
+	uint8_t jobId;						//	0 ~ 255
 
 	//	 Temporature Alert
 	int bTempAlert;
@@ -48,7 +75,34 @@ typedef struct SEVICE_INFO {
 
 	pthread_mutex_t hMutex;
 	pthread_t		hWorkThread;		//	Work Thread Handler
-	pthread_t		hMonThread;			//	Monitor Thread Handler
+
+
+
+	//	BTC08 Handle
+	BTC08_HANDLE hBtc08;
+
+	//	Loop Control Parameters
+	int bExitJobLoop;
+	int bExitMinLoop;
+	int bExitMonLoop;
+	int bExitCmdLoop;
+
+	//	Queue
+	NX_QUEUE		cmdQueue;			//	Command Queue
+	NX_QUEUE		workQueue;			//	Work Queue
+
+	NX_SEMAPHORE	hCmdSem;			//	Semaphore for Command
+	NX_SEMAPHORE	hWorkSem;			//	Semaphore for work queue
+
+	//	Loop Handle
+	pthread_t		hJobThread;			//	Job Creation Loop
+	pthread_t		hMinThread;			//	Mining Loop
+	pthread_t		hMonThread;			//	Monitoring Loop
+	pthread_t		hCmdThread;			//	Command Loop
+
+	//	Nonce Distribution
+	uint8_t			startNonce[MAX_CHIPS][4];
+	uint8_t			endNonce[MAX_CHIPS][4];
 } SERVICE_INFO;
 
 
@@ -64,7 +118,96 @@ typedef struct SEVICE_INFO {
 //	 b. Auto Address : find out number of chips.
 //	 c. Bist : find out number of cores individual chip.
 //
-static void InitializeWorkLoop( SERVICE_INFO *hService )
+
+static void RunBist( BTC08_HANDLE handle)
+{
+	uint8_t *ret;
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+
+	NxDbgMsg( NX_DBG_INFO, "=== RUN BIST ==\n");
+
+	Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
+	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
+
+	// Set the golden nonce instead of the nonce range
+	Btc08WriteNonce (handle, BCAST_CHIP_ID, golden_nonce, golden_nonce);
+	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
+	Btc08RunBist    (handle, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
+
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	{
+		// If it's not BUSY status, read the number of cores in next READ_BIST
+		for (int i=0; i<10; i++) {
+			ret = Btc08ReadBist(handle, chipId);
+			if ( (ret[0] & 1) == 0 )
+				break;
+			else
+				NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
+						chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
+
+			usleep( 300 );
+		}
+		ret = Btc08ReadBist(handle, chipId);
+		handle->numCores[chipId-1] = ret[1];
+		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
+					chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
+	}
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	{
+		Btc08ReadId(handle, chipId, res, res_size);
+		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Number of jobs = %d\n", "",
+					chipId, (res[2]&7) );
+	}
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                              Mining Block                                  //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+static void DistributionNonce( BTC08_HANDLE handle )
+{
+	int ii;
+	uint32_t totalCores = 0;
+	uint32_t noncePerCore;
+	uint32_t startNonce, endNonce;
+
+	for( int i=0 ; i<handle->numChips ; i++ )
+	{
+		totalCores += handle->numCores[i];
+	}
+	NxDbgMsg( NX_DBG_INFO, "Total Cores = %d\n", totalCores );
+
+	noncePerCore = 0xffffffff / totalCores;
+	startNonce = 0;
+	for( ii=0 ; ii<handle->numChips-1 ; ii++ ) {
+		endNonce = startNonce + (noncePerCore*handle->numCores[ii]);
+		{
+			handle->startNonce[ii][0] = (startNonce>>24) & 0xff;
+			handle->startNonce[ii][1] = (startNonce>>16) & 0xff;
+			handle->startNonce[ii][2] = (startNonce>>8 ) & 0xff;
+			handle->startNonce[ii][3] = (startNonce>>0 ) & 0xff;
+			handle->endNonce[ii][0]   = (endNonce>>24) & 0xff;
+			handle->endNonce[ii][1]   = (endNonce>>16) & 0xff;
+			handle->endNonce[ii][2]   = (endNonce>>8 ) & 0xff;
+			handle->endNonce[ii][3]   = (endNonce>>0 ) & 0xff;
+		}
+		startNonce = endNonce + 1;
+	}
+	handle->startNonce[ii][0] = (startNonce>>24) & 0xff;
+	handle->startNonce[ii][1] = (startNonce>>16) & 0xff;
+	handle->startNonce[ii][2] = (startNonce>>8 ) & 0xff;
+	handle->startNonce[ii][3] = (startNonce>>0 ) & 0xff;
+	handle->endNonce[ii][0] = 0xff;
+	handle->endNonce[ii][1] = 0xff;
+	handle->endNonce[ii][2] = 0xff;
+	handle->endNonce[ii][3] = 0xff;
+}
+
+static void InitializeMiningkLoop( SERVICE_INFO *hService )
 {
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
@@ -77,39 +220,26 @@ static void InitializeWorkLoop( SERVICE_INFO *hService )
 	Btc08ResetHW(handle, 0);
 
 	// 2. Auto Address
-	hService->numChips = Btc08AutoAddress(handle);
-	NxDbgMsg(NX_DBG_INFO, "Number of Chips = %d\n", hService->numChips);
+	Btc08AutoAddress(handle);
 
-	// 3. BIST
-	Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
-	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
-	Btc08WriteNonce (handle, BCAST_CHIP_ID, golden_nonce, golden_nonce);
+	// 3. S/W Reset S/W
+	Btc08Reset(handle);
+
+	// 4. Set last chip
+	Btc08SetControl(handle, 1, LAST_CHIP);
+	handle->numChips = Btc08AutoAddress(handle);
+
+	// 5. Enable all cores
 	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
-	Btc08RunBist    (handle, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
-	for (int chipId = 1; chipId <= hService->numChips; chipId++)
-	{
-		// If it's not BUSY status, read the number of cores in next READ_BIST
-		for (int i=0; i<10; i++) {
-			ret = Btc08ReadBist(handle, chipId);
-			if ( (ret[0] & 1) == 0 )
-				break;
-			else
-				NxDbgMsg( NX_DBG_INFO, "ChipId = %d, Status = %s, Number of cores = %d\n",
-						chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
 
-			usleep( 300 );
-		}
-		ret = Btc08ReadBist(handle, chipId);
-		hService->numCores[chipId] = ret[1];
-		NxDbgMsg( NX_DBG_INFO, "ChipId = %d, Status = %s, Number of cores = %d\n",
-					chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
-	}
-	for (int chipId = 1; chipId <= hService->numChips; chipId++)
-	{
-		Btc08ReadId(handle, chipId, res, res_size);
-		NxDbgMsg( NX_DBG_INFO, "ChipId = %d, Number of jobs = %d\n",
-					chipId, (res[2]&7) );
-	}
+	// 6. Find number of cores of individual chips
+	RunBist( handle );
+
+	// 7. Enable OON IRQ/Set UART divider
+	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
+
+	// 8. Nonce Distribution
+	DistributionNonce( handle );
 
 	hService->totalJobCnt = 0;
 	hService->jobId = 1;
@@ -172,7 +302,7 @@ static int handleGN(SERVICE_INFO *hService, uint8_t chipId)
 
 	for (int i=0; i<16; i+=4)
 	{
-		uint32_t cal_gn = calRealGN(chipId, &(gn[2+i]), validCnt, hService->numCores[chipId]);
+		uint32_t cal_gn = calRealGN(chipId, &(gn[2+i]), validCnt, hService->hBtc08->numCores[chipId]);
 		if (cal_gn == 0x66cb3426)
 		{
 			NxDbgMsg(NX_DBG_INFO, "Inst_%s found golden nonce 0x%08x \n",
@@ -223,7 +353,7 @@ static void *WorkLoop( void *arg )
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = 4;
 
-	InitializeWorkLoop( hService );
+	InitializeMiningkLoop( hService );
 
 	handle = hService->hBtc08;
 
