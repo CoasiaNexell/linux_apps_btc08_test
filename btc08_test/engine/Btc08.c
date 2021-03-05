@@ -524,10 +524,15 @@ int Btc08ReadTarget  (BTC08_HANDLE handle, uint8_t chipId )
 		return -1;
 	}
 
-	//
-	//	TODO: FIXME: Need processing read data
-	//
 	rx = handle->rxBuf + txLen;
+	// rx[0-3]: [47:16] Target (32bits)
+	// rx[  4]: [15:12] 4'h0
+	//           [11:8] Select0
+	// rx[  5]:   [7:0] Select1
+	NxDbgMsg(NX_DBG_DEBUG, " <== Target(%02x %02x %02x %02x), Select0(%02x), Select1(%02x)\n",
+				rx[0], rx[1], rx[2], rx[3],
+				(rx[4]&15), rx[5]);
+
 	return 0;
 }
 
@@ -614,30 +619,34 @@ int Btc08ReadResult  (BTC08_HANDLE handle, uint8_t chipId, uint8_t* gn, uint8_t 
 
 	memcpy(gn, rx, gn_size);
 
-	// rx[   0]: [139:136] Inst_Lower_3/Inst_Lower_2/Inst_Lower/Upper found golden nonce
-	// rx[   1]: [135:128] read ValidCnt in Core
-	// rx[ 2-5]: [127:96] read_golden_nonce of Inst_Lower
-	// rx[ 6-9]: [95:64]  read_golden_nonce of Inst_Lower
-	// rx[10-13]: [63:32] read_golden_nonce of Inst_Lower
-	// rx[14-17]: [31:0]  read_golden_nonce of Inst_Upper
-	lower3 = rx[0] & (1<<3);
-	lower2 = rx[0] & (1<<2);
-	lower  = rx[0] & (1<<1);
-	upper  = rx[0] & (1<<0);
-	validCnt = rx[1];
+	// rx[  0-3]: [143:112] read_golden_nonce of Inst_Upper(when no golden nonce, just 0) 
+	// rx[  4-7]:  [111:80] read_golden_nonce of Inst_Lower(when no golden nonce, just 0) 
+	// rx[ 8-11]:   [79:48] read_golden_nonce of Inst_Lower2(when no golden nonce, just 0) 
+	// rx[12-15]:   [47:16] read_golden_nonce of Inst_Lower3(when no golden nonce, just 0) 
+	// rx[   16]:    [15:8] read ValidCnt in Core(use this value for calculating real golden nonce)
+	// rx[   17]:     [7:4] 4'h0
+	//                  [3] Inst_Lower_3 found golden nonce
+	//                  [2] Inst_Lower_2 found golden nonce
+	//                  [1] Inst_Lower found golden nonce
+	//                  [0] Inst_Upper found golden nonce
+	validCnt = rx[16];
+	lower3   = rx[17] & (1<<3);
+	lower2   = rx[17] & (1<<2);
+	lower    = rx[17] & (1<<1);
+	upper    = rx[17] & (1<<0);
 
 #if DEBUG_RESULT
-	if (0 != lower3) {
-		NxDbgMsg(NX_DBG_INFO, " <== Inst_Lower_3 found golden nonce %02x %02x %02x %02x \n", rx[2], rx[3], rx[4], rx[5]);
-	}
-	if (0 != lower2) {
-		NxDbgMsg(NX_DBG_INFO, " <== Inst_Lower_2 found golden nonce %02x %02x %02x %02x \n", rx[6], rx[7], rx[8], rx[9]);
+	if (0 != upper) {
+		NxDbgMsg(NX_DBG_INFO, " <== Inst_Upper found golden nonce %02x %02x %02x %02x \n", rx[0], rx[1], rx[2], rx[3]);
 	}
 	if (0 != lower) {
-		NxDbgMsg(NX_DBG_INFO, " <== Inst_Lower found golden nonce %02x %02x %02x %02x \n", rx[10], rx[11], rx[12], rx[13]);
+		NxDbgMsg(NX_DBG_INFO, " <== Inst_Lower found golden nonce %02x %02x %02x %02x \n", rx[4], rx[5], rx[6], rx[7]);
 	}
-	if (0 != upper) {
-		NxDbgMsg(NX_DBG_INFO, " <== Inst_Upper found golden nonce %02x %02x %02x %02x \n", rx[14], rx[15], rx[16], rx[17]);
+	if (0 != lower2) {
+		NxDbgMsg(NX_DBG_INFO, " <== Inst_Lower_2 found golden nonce %02x %02x %02x %02x \n", rx[8], rx[9], rx[10], rx[11]);
+	}
+	if (0 != lower3) {
+		NxDbgMsg(NX_DBG_INFO, " <== Inst_Lower_3 found golden nonce %02x %02x %02x %02x \n", rx[12], rx[13], rx[14], rx[15]);
 	}
 #endif
 

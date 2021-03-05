@@ -156,10 +156,6 @@ static char *bin2hex(const unsigned char *p, size_t len)
 //		Nonce, Hash
 //
 
-
-
-
-
 static BLOCk_DATA_INFO gstGoldenData[7] = {
 	// Index 0
 	{
@@ -545,8 +541,9 @@ static void DumpVectorData( VECTOR_DATA *data )
 		DumpData("MidState3   ", data->midState + 32*3, 32);
 		DumpData("Parameter   ", data->parameter, sizeof(data->parameter));
 		DumpData("Target      ", data->target, sizeof(data->target));
-		// DumpData("Start Nonce ", data->startNonce, sizeof(data->startNonce));
-		// DumpData("End Nonce   ", data->endNonce, sizeof(data->endNonce));
+		//DumpData("Start Nonce ", data->startNonce, sizeof(data->startNonce));
+		//DumpData("End Nonce   ", data->endNonce, sizeof(data->endNonce));
+		//DumpData("Nonce       ", data->nonce, sizeof(data->nonce));
 	}
 }
 
