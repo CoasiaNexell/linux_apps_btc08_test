@@ -357,8 +357,9 @@ static void TestWorkLoop(int numWorks)
 	uint8_t res[4] = {0x00,};
 	uint8_t oon_jobid, gn_jobid;
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-	struct timespec ts_start, ts_oon, ts_gn, ts_diff;
-	int jobcnt = 0;
+	struct timespec ts_start, ts_oon, ts_gn, ts_diff, ts_last_oon;
+	uint64_t jobcnt = 0;
+	uint64_t hashes_done;
 	VECTOR_DATA data;
 
 	tstimer_time(&ts_start);
@@ -478,6 +479,17 @@ static void TestWorkLoop(int numWorks)
 						jobId = 1;
 				}
 				else {
+					uint64_t total_processed_works = (jobcnt - 2);
+					if (oon_job_id == (total_processed_works-1))
+					{
+						tstimer_time(&ts_last_oon);
+						tstimer_diff(&ts_last_oon, &ts_start, &ts_diff);
+
+						hashes_done = total_processed_works * 0x100000000;
+						uint64_t hashrate = hashes_done/(1024*1024) / ts_diff.tv_sec;
+						NxDbgMsg(NX_DBG_INFO, "Works = %llu, Hash = %llu MHash, Time = %ld, HashRate = %ld Mh/s\n",
+								total_processed_works, hashes_done/(1024*1024), ts_diff.tv_sec, hashrate);
+					}
 					break;
 				}
 			} else {						// OON IRQ is not set (cgminer: check OON timeout is expired)
@@ -490,8 +502,7 @@ static void TestWorkLoop(int numWorks)
 		sched_yield();
 	}
 
-	tstimer_diff(&ts_oon, &ts_start, &ts_diff);
-	NxDbgMsg(NX_DBG_INFO, "Total works = %d [%ld.%lds]\n", jobcnt, ts_diff.tv_sec, ts_diff.tv_nsec);
+	NxDbgMsg(NX_DBG_INFO, "Total works = %d\n", jobcnt);
 
 	DestroyBtc08( handle );
 }
