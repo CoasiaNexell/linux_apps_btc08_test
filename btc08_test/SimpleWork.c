@@ -631,7 +631,7 @@ static void TestWorkLoop_JobDist(int index)
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
 
 	index = rand() % MAX_NUM_VECTOR;
-	GetGoldenVector(index, &data);
+	GetGoldenVector(index, &data, 1);
 
 	// Sequence 8. Setting parameters, target, nonce range
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
@@ -711,7 +711,7 @@ static void TestWorkLoop_JobDist(int index)
 					bGN = false;
 					//	Get New Vector
 					index = rand() % MAX_NUM_VECTOR;
-					GetGoldenVector(index, &data);
+					GetGoldenVector(index, &data, 1);
 					Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
 				}
 				totalProcessedHash += 0x400000000;	//	0x100000000 * 4 (asic booster)
