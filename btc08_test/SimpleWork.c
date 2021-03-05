@@ -514,23 +514,85 @@ static void DistributionNonce( BTC08_HANDLE handle )
 	handle->endNonce[ii]=0xffffffff;
 
 }
-static void TestWorkLoop_JobDist(int numWorks)
+
+static void FindNextTimeStamp( uint8_t *param )
+{
+	uint32_t epochTime;
+
+	epochTime = (param[4]<<24) | 
+				(param[5]<<16) |
+				(param[6]<< 8) |
+				(param[7]<< 0);
+
+	epochTime += 1;
+
+	param[4] = (epochTime >> 24) & 0xff;
+	param[5] = (epochTime >> 16) & 0xff;
+	param[6] = (epochTime >>  8) & 0xff;
+	param[7] = (epochTime >>  0) & 0xff;
+}
+
+static int handleGN2(BTC08_HANDLE handle, uint8_t chipId, VECTOR_DATA *data)
+{
+	int ret = 0;
+	uint8_t hash[128] = {0x00,};
+	uint8_t res[18] = {0x00,};
+	bool bHash = false;
+	bool bNonce = false;
+
+	// Sequence 1. Read Hash
+	Btc08ReadHash(handle, chipId, hash, sizeof(hash));
+	for (int i=0 ; i<4 ; i++)
+	{
+		ret = memcmp(data->hash, &(hash[i*32]), 32);
+		if (ret == 0)
+		{
+			NxDbgMsg(NX_DBG_INFO, "%5s [%d] : Hash matched of Inst_%s!!!\n", "", i,
+					(i==0) ? "Lower_3":(((i==1) ? "Lower_2": ((i==2) ? "Lower":"Upper"))));
+			bHash = true;
+		}
+	}
+
+	// Sequence 2. Read Result to read GN and clear GN IRQ
+	Btc08ReadResult(handle, chipId, res, sizeof(res));
+	for (int i=0 ; i<4 ; i++)
+	{
+		ret = memcmp( data->nonce, res + i*4, 4 );
+		if( ret == 0 )
+		{
+			NxDbgMsg( NX_DBG_INFO, "%5s [%d] : nonce = %02x %02x %02x %02x\n", "", i,
+				*(res + i*4), *(res + i*4 + 1), *(res + i*4 + 2), *(res + i*4 + 3) );
+			bNonce = true;
+		}
+	}
+
+	return (bHash&&bNonce) ? 0 : -1;
+}
+
+
+static void TestWorkLoop_JobDist(int index)
 {
 	int ii;
-	uint8_t chipId = 0x00, jobId = 0x01, jobcnt = 0x01;
+	uint8_t chipId = 0x00, jobId = 0x01;
 	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00;
 	uint8_t res[4] = {0x00,};
 	uint8_t oon_jobid, gn_jobid;
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 
-	uint8_t start_nonce[4] = { 0x50, 0x00, 0x00, 0x00 };
-	uint8_t end_nonce[4]   = { 0x6f, 0xff, 0xff, 0xff };
-	struct timespec ts_start, ts_oon, ts_gn, ts_diff;
+	uint8_t start_nonce[4];
+	uint8_t end_nonce[4];
+	uint64_t startTime, currTime, deltaTime, prevTime;
+	double totalTime;
+	double megaHash;
 
+	uint64_t totalProcessedHash = 0;
+	bool bGN = false;
 	VECTOR_DATA data;
+	uint32_t nonce = 0;
 
-	tstimer_time(&ts_start);
-	NxDbgMsg(NX_DBG_INFO, "=== Start workloop === [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
+	srand( (uint32_t)get_current_ms() );
+
+	NxDbgMsg(NX_DBG_INFO, "=== Start workloop ===\n");
 
 	// Seqeunce 1. Create Handle
 	BTC08_HANDLE handle = CreateBtc08(0);
@@ -544,10 +606,6 @@ static void TestWorkLoop_JobDist(int numWorks)
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
-#if DEBUG
-		NxDbgMsg( NX_DBG_DEBUG, "ChipId = %d, Number of jobs = %d\n",
-					chipId, (res[2]&7) );
-#endif
 	}
 
 	// Sequence 3. Reset S/W
@@ -560,10 +618,6 @@ static void TestWorkLoop_JobDist(int numWorks)
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
-#if DEBUG
-		NxDbgMsg( NX_DBG_DEBUG, "ChipId = %d, Number of jobs = %d\n",
-					chipId, (res[2]&7) );
-#endif
 	}
 
 	// Sequence 5. Enable all cores
@@ -576,10 +630,10 @@ static void TestWorkLoop_JobDist(int numWorks)
 	// Sequence 7. Enable OON IRQ/Set UART divider
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
 
-	GetGoldenVector(0, &data);
+	index = rand() % MAX_NUM_VECTOR;
+	GetGoldenVector(index, &data);
 
 	// Sequence 8. Setting parameters, target, nonce range
-	Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
 
 	for( int i=0; i<handle->numChips ; i++ )
@@ -598,16 +652,19 @@ static void TestWorkLoop_JobDist(int numWorks)
 		Btc08WriteNonce(handle, i+1, start_nonce, end_nonce);
 	}
 
-	tstimer_time(&ts_start);
-	NxDbgMsg( NX_DBG_INFO, "=== RUN JOB === [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
+	NxDbgMsg( NX_DBG_INFO, "=== RUN JOB ===\n");
+
+	startTime = get_current_ms();
+	prevTime = startTime;
 
 	// Sequence 9. Run job
 	for (int i = 0; i < MAX_JOB_FIFO_NUM; i++)
 	{
 		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId = %d\n", "", jobId);
+		Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
+		FindNextTimeStamp( data.parameter );
+
 		Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
-	// fifo status
-		jobcnt++;
 	}
 
 	while(1)
@@ -620,12 +677,19 @@ static void TestWorkLoop_JobDist(int numWorks)
 
 			if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
 				// Check if found GN(0x66cb3426) is correct and submit nonce to pool server and then go loop again
-				tstimer_time(&ts_gn);
-				NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d!!! === [%ld.%lds]\n", "", chipId, ts_gn.tv_sec, ts_gn.tv_nsec);
+				NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d!!! ===\n", "", chipId);
 
-				handleGN(handle, chipId);
+				if( 0 != handleGN2(handle, chipId, &data) )
+				{
+					NxDbgMsg(NX_DBG_ERR, "%5s  === Miss matching hash or nonce ===\n", "");
+				}
+				nonce = ( data.nonce[0] << 24 ) |
+						( data.nonce[1] << 16 ) |
+						( data.nonce[2] <<  8 ) |
+						( data.nonce[3] <<  0 );
+				bGN = true;
 			} else {				// If GN IRQ is not set, then go to check OON
-				NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!\n", "");
+				NxDbgMsg(NX_DBG_DEBUG, "%5s === H/W GN occured but GN_IRQ value is not set!\n", "");
 			}
 		}
 
@@ -636,24 +700,40 @@ static void TestWorkLoop_JobDist(int numWorks)
 			oon_irq	  = res[2] & (1<<1);
 			chipId    = res[3];
 
-			if (0 != oon_irq) {				// If OON IRQ is set, handle OON
-				tstimer_time(&ts_oon);
-				NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ on chip#%d!!! === [%ld.%lds]\n", "", chipId, ts_oon.tv_sec, ts_oon.tv_nsec);
+			if (0 != oon_irq)				// If OON IRQ is set, handle OON
+			{
+				NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ on chip#%d!!! ===\n", "", chipId);
 
 				handleOON(handle);
 
-				if (numWorks >= jobcnt)
+				if( bGN )
 				{
-					NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId = %d\n", "", jobId);
-					Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
-					jobcnt++;
-					if (jobId > MAX_JOB_ID)		// [7:0] job id ==> 8bits (max 256)
-						jobId = 1;
+					bGN = false;
+					//	Get New Vector
+					index = rand() % MAX_NUM_VECTOR;
+					GetGoldenVector(index, &data);
+					Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
 				}
-				else {
-					break;
-				}
-			} else {						// OON IRQ is not set (cgminer: check OON timeout is expired)
+				totalProcessedHash += 0x400000000;	//	0x100000000 * 4 (asic booster)
+
+				currTime = get_current_ms();
+				totalTime = currTime - startTime;
+
+				megaHash = totalProcessedHash / (1024*1024);
+				NxDbgMsg(NX_DBG_INFO, "AVG : %.2f MHash/s,  Hash = %.2f GH, Time = %.2f sec, delta = %lld msec\n",
+						megaHash * 1000. / totalTime, megaHash/1024, totalTime/1000. , currTime - prevTime );
+
+				prevTime = currTime;
+
+				NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId = %d\n", "", jobId);
+				Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
+				Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+				FindNextTimeStamp( data.parameter );
+				if (jobId >= MAX_JOB_ID)		// [7:0] job id ==> 8bits (max 256)
+					jobId = 1;
+			} 
+			else		// OON IRQ is not set (cgminer: check OON timeout is expired)
+			{
 				NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set! ===\n", "");
 				// if oon timeout is expired, disable chips
 				// if oon timeout is not expired, check oon gpio again
@@ -662,9 +742,6 @@ static void TestWorkLoop_JobDist(int numWorks)
 
 		sched_yield();
 	}
-
-	tstimer_diff(&ts_oon, &ts_start, &ts_diff);
-	NxDbgMsg(NX_DBG_INFO, "Total works = %d [%ld.%lds]\n", (jobcnt-1), ts_diff.tv_sec, ts_diff.tv_nsec);
 
 	DestroyBtc08( handle );
 }
@@ -706,7 +783,13 @@ void SimpleWorkLoop(void)
 		//----------------------------------------------------------------------
 		else if( !strcasecmp(cmd[0], "3") )
 		{
-			TestWorkLoop_JobDist( 50000 );
+			int index = 0;
+			if( cmdCnt > 1 )
+			{
+				index = strtol(cmd[1], 0, 10);
+			}
+			printf("numWork = %d\n", index);
+			TestWorkLoop_JobDist( index );
 		}
 	}
 }

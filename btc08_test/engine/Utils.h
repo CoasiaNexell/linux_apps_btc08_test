@@ -14,7 +14,7 @@ void tvtimer_diff(struct timeval *end, struct timeval *start, struct timeval *re
 void tstimer_time(struct timespec *ts);
 int tstimer_to_ms(struct timespec *ts);
 void tstimer_diff(struct timespec *end, struct timespec *start, struct timespec *res);
-int get_current_ms();
+uint64_t get_current_ms();
 
 void HexDump( const char *name, const void *data, int32_t size );
 

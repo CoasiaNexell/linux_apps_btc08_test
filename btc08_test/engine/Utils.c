@@ -80,13 +80,13 @@ void tstimer_diff(struct timespec *end, struct timespec *start, struct timespec 
 }
 
 // get current time in ms unit
-int get_current_ms()
+uint64_t get_current_ms()
 {
+	uint64_t msec;
 	struct timespec ts;
 	tstimer_time(&ts);
-	printf("%ld.%lds\n", ts.tv_sec, ts.tv_nsec);
-
-	return tstimer_to_ms(&ts);
+	msec = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+	return msec;
 }
 
 void HexDump( const char *name, const void *data, int32_t size )

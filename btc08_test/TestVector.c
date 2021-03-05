@@ -8,11 +8,26 @@
 #include "TestVector.h"
 
 /* GOLDEN_MIDSTATE */
-uint8_t default_golden_midstate[32] = {
+uint8_t default_golden_midstate[32*4] = {
 	0x5f, 0x4d, 0x60, 0xa2, 0x53, 0x85, 0xc4, 0x07,
 	0xc2, 0xa8, 0x4e, 0x0c, 0x25, 0x91, 0x69, 0xc4,
 	0x10, 0xa4, 0xa5, 0x4b, 0x93, 0xf7, 0x17, 0x08,
 	0xf1, 0xab, 0xdf, 0xec, 0x6e, 0x8b, 0x81, 0xd2,
+
+	0x5f, 0x4d, 0x60, 0xa2, 0x53, 0x85, 0xc4, 0x07,
+	0xc2, 0xa8, 0x4e, 0x0c, 0x25, 0x91, 0x69, 0xc4,
+	0x10, 0xa4, 0xa5, 0x4b, 0x93, 0xf7, 0x17, 0x08,
+	0xf1, 0xab, 0xdf, 0xec, 0x6e, 0x8b, 0x81, 0xd2,
+
+	0x5f, 0x4d, 0x60, 0xa2, 0x53, 0x85, 0xc4, 0x07,
+	0xc2, 0xa8, 0x4e, 0x0c, 0x25, 0x91, 0x69, 0xc4,
+	0x10, 0xa4, 0xa5, 0x4b, 0x93, 0xf7, 0x17, 0x08,
+	0xf1, 0xab, 0xdf, 0xec, 0x6e, 0x8b, 0x81, 0xd2,
+
+	0x5f, 0x4d, 0x60, 0xa2, 0x53, 0x85, 0xc4, 0x07,
+	0xc2, 0xa8, 0x4e, 0x0c, 0x25, 0x91, 0x69, 0xc4,
+	0x10, 0xa4, 0xa5, 0x4b, 0x93, 0xf7, 0x17, 0x08,
+	0xf1, 0xab, 0xdf, 0xec, 0x6e, 0x8b, 0x81, 0xd2
 };
 
 /* GOLDEN_DATA */
@@ -154,7 +169,7 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 		//	Version       : 20000000
 		//	Merkle Root   : 222be02d6272f066d498c4f5374283e146f7ccb0a4148d0107a6bc2418174bec
 		//	Previous Hash : 000000000000000000056e900ac4220ce2287a082d0ba6b974cfdd3e498f76f2
-		//	TimeStamp     : 2021-02-23 13:12
+		//	TimeStamp     : 2021-02-23 04:12 (0x60348090) + alpha() : blockchair's mined on time 
 		//	Nonce         : 1353073737
 		//	Bits          : 386725091
 		{
@@ -180,7 +195,7 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 			0x62,0x72,0xf0,0x66,
 			0x22,0x2b,0xe0,0x2d,
 			//	TimeStamp
-			0x60,0x34,0x72,0x41,	//	parameter[12]
+			0x60,0x34,0x80,0x90,	//	parameter[12]
 			//	Bits
 			0x17,0x0C,0xF4,0xE3,
 			//-------------------------------------------
@@ -209,7 +224,7 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 		//	Version : 20400000
 		//	Previous Hash : 00000000000000000006bf973dc198707645fc75bb6141e2e2e28da3aacfeb47
 		//	Merckle Root : f9b139565dfda4eb59940d5ee080fdc68fd371d395350f508c024595064d44c4
-		//	Time : 2021-02-24 00:57:04
+		//	Time : 2021-02-24 01:08, 6035A6F0
 		//	Bits : 386725091
 		//	Nonce : 639392792
 		//
@@ -234,8 +249,8 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 			0x59,0x94,0x0d,0x5e,
 			0x5d,0xfd,0xa4,0xeb,
 			0xf9,0xb1,0x39,0x56,
-			//	TimeStamp 2021-02-24 00:57:04
-			0x60,0x35,0xA4,0x60,
+			//	TimeStamp 6035A6F0
+			0x60,0x35,0xA6,0xF0,
 			//	Bits (386725091)
 			0x17,0x0C,0xF4,0xE3,
 			//	Nonce (639392792)
@@ -261,7 +276,7 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 		//	Version : 27ffe000
 		//	Previous Hash : 00000000000000000007e6336da9efc6d9b98966eed15241cc0ff75f0ecc5638
 		//	Merkle Root : 3a81535e71294d1546c6329e2ae424d9308971323f998914aa7419ba93c32583
-		//	TimeStamp : 2021-02-24 00:59:18
+		//	TimeStamp : 2021-02-24 01:29 , 6035ABDC
 		//	Bits : 386725091
 		//	Nonce : 3675314107
 		{
@@ -285,8 +300,8 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 			0x46,0xc6,0x32,0x9e,
 			0x71,0x29,0x4d,0x15,
 			0x3a,0x81,0x53,0x5e,
-			//	TimeStamp(2021-02-24 00:59:18 -> 1614128224)
-			0x60,0x35,0xA4,0xE6,
+			//	TimeStamp 6035ABDC
+			0x60,0x35,0xAB,0xDC,
 			//	Bits (386725091)
 			0x17,0x0C,0xF4,0xE3,
 			//	Nonce (3675314107)
@@ -314,33 +329,33 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 		//	Version       : 2000e000
 		//	Previous Hash : 0000000000000000000281aec9110b39a14b747ba95aa333e472c9da7dd0f97d
 		//	Merkle Root   : 4949ad5a4c52006d85db1356f20b14b57c43012abe4b22cfcf830e5ceff62ce4
-		//	TimeStamp     : 2021-02-24 01:01:54
+		//	TimeStamp     : 2021-02-24 01:57
 		//	Bits          : 386725091
 		//	Nonce         : 289953179
 		{
 			//	Version
 			0x20,0x00,0xe0,0x00,
 			//	Previous Hash
-			0x00,0x00,0x00,0x00,
-			0x00,0x00,0x00,0x00,
-			0x00,0x02,0x81,0xae,
-			0xc9,0x11,0x0b,0x39,
-			0xa1,0x4b,0x74,0x7b,
-			0xa9,0x5a,0xa3,0x33,
-			0xe4,0x72,0xc9,0xda,
 			0x7d,0xd0,0xf9,0x7d,
+			0xe4,0x72,0xc9,0xda,
+			0xa9,0x5a,0xa3,0x33,
+			0xa1,0x4b,0x74,0x7b,
+			0xc9,0x11,0x0b,0x39,
+			0x00,0x02,0x81,0xae,
+			0x00,0x00,0x00,0x00,
+			0x00,0x00,0x00,0x00,
 			//	Merkle Root
-			0x49,0x49,0xad,0x5a,
-			0x4c,0x52,0x00,0x6d,
-			0x85,0xdb,0x13,0x56,
-			0xf2,0x0b,0x14,0xb5,
-			0x7c,0x43,0x01,0x2a,
-			0xbe,0x4b,0x22,0xcf,
-			0xcf,0x83,0x0e,0x5c,
 			0xef,0xf6,0x2c,0xe4,
+			0xcf,0x83,0x0e,0x5c,
+			0xbe,0x4b,0x22,0xcf,
+			0x7c,0x43,0x01,0x2a,
+			0xf2,0x0b,0x14,0xb5,
+			0x85,0xdb,0x13,0x56,
+			0x4c,0x52,0x00,0x6d,
+			0x49,0x49,0xad,0x5a,
 
-			//	TimeStamp(2021-02-24 01:01:54 -> 1614128514)
-			0x60,0x35,0xA5,0x82,
+			//	TimeStamp 6035B26C
+			0x60,0x35,0xB2,0x6C,
 			//	Bits (386725091)
 			0x17,0x0C,0xF4,0xE3,
 			//	Nonce (289953179)
@@ -367,7 +382,7 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 	// Version                    20000000
 	// Prev_Hash                  00000000000000000026087ab13d78b5062f38bceb8fe2dc14c53e6b25057933
 	// Merkle_Root                f42a1d6e97a8bc9f22e5516842b25ac4d53b2442b971b718a07e2c9d3085a5a5
-	// Time                       5B30707E (2018-06-25 04:34:14)
+	// Time                       5B30707E (2018-06-25 04:33:00) // 5B30707C
 	// Bits                       17376F56
 	// Nonce                      66cb3426
 
@@ -425,40 +440,50 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 		{
 			//-------------------------------------------
 			//	Version 00000002
-			0x02,0x00,0x00,0x00,
+			0x00,0x00,0x00,0x02,
 			//	Previous Block Hash
 			//000000000000000117c80378b8da0e33559b5997f2ad55e2f7d18ec1975b9717
-			0x17,0x97,0x5b,0x97,
-			0xc1,0x8e,0xd1,0xf7,
-			0xe2,0x55,0xad,0xf2,
-			0x97,0x59,0x9b,0x55,
-			0x33,0x0e,0xda,0xb8,
-			0x78,0x03,0xc8,0x17,
-			0x01,0x00,0x00,0x00,
+			0x97,0x5b,0x97,0x17,
+			0xf7,0xd1,0x8e,0xc1,
+			0xf2,0xad,0x55,0xe2,
+			0x55,0x9b,0x59,0x97,
+			0xb8,0xda,0x0e,0x33,
+			0x17,0xc8,0x03,0x78,
+			0x00,0x00,0x00,0x01,
 			0x00,0x00,0x00,0x00,
+
 			//	Merkle Root
 			//871714dcbae6c8193a2bb9b2a69fe1c0440399f38d94b3a0f1b447275a29978a
-			0x8a,0x97,0x29,0x5a,
-			0x27,0x47,0xb4,0xf1,
-			0xa0,0xb3,0x94,0x8d,
-			0xf3,0x99,0x03,0x44,
-			0xc0,0xe1,0x9f,0xa6,
-			0xb2,0xb9,0x2b,0x3a,
-			0x19,0xc8,0xe6,0xba,
-			0xdc,0x14,0x17,0x87,
-			//	TimeStamp  2014-02-20 04:11:37
-			// 530501E9(local time) 53058079 (GMT)
-			0x35,0x8b,0x05,0x53,
-			//	Bits
-			//19015F53
-			0x53,0x5f,0x01,0x19,
-			//	Nonce
-			//33087548
-			0x48,0x75,0x08,0x33
+			0x5a,0x29,0x97,0x8a,
+			0xf1,0xb4,0x47,0x27,
+			0x8d,0x94,0xb3,0xa0,
+			0x44,0x03,0x99,0xf3,
+			0xa6,0x9f,0xe1,0xc0,
+			0x3a,0x2b,0xb9,0xb2,
+			0xba,0xe6,0xc8,0x19,
+			0x87,0x17,0x14,0xdc,
 
+			//	TimeStamp  2014-02-20 04:57
+			//	53058B1C
+			0x53,0x05,0x8b,0x1c,
+			//	Bits
+			//	19015F53
+			0x19,0x01,0x5F,0x53,
+			//	Nonce
+			//	33087548
+			0x33,0x08,0x75,0x48
 		},
 		//0000000000000000e067a478024addfecdc93628978aa52d91fabd4292982a50
-		{0,}
+		{
+			0x00,0x00,0x00,0x00,
+			0x00,0x00,0x00,0x00,
+			0xe0,0x67,0xa4,0x78,
+			0x02,0x4a,0xdd,0xfe,
+			0xcd,0xc9,0x36,0x28,
+			0x97,0x8a,0xa5,0x2d,
+			0x91,0xfa,0xbd,0x42,
+			0x92,0x98,0x2a,0x50,
+		}
 	},
 
 	// Index 6
@@ -514,11 +539,14 @@ static void DumpVectorData( VECTOR_DATA *data )
 {
 	if( data )
 	{
-		DumpData("MidState    ", data->midState, sizeof(data->midState));
+		DumpData("MidState    ", data->midState + 32*0, 32);
+		DumpData("MidState1   ", data->midState + 32*1, 32);
+		DumpData("MidState2   ", data->midState + 32*2, 32);
+		DumpData("MidState3   ", data->midState + 32*3, 32);
 		DumpData("Parameter   ", data->parameter, sizeof(data->parameter));
 		DumpData("Target      ", data->target, sizeof(data->target));
-		DumpData("Start Nonce ", data->startNonce, sizeof(data->startNonce));
-		DumpData("End Nonce   ", data->endNonce, sizeof(data->endNonce));
+		// DumpData("Start Nonce ", data->startNonce, sizeof(data->startNonce));
+		// DumpData("End Nonce   ", data->endNonce, sizeof(data->endNonce));
 	}
 }
 
@@ -549,27 +577,72 @@ static void DumpVectorData( VECTOR_DATA *data )
 //	                            |---1---|
 //	                               |---0--|
 //
-void GetGoldenVector( int idx, VECTOR_DATA *data )
+void GetGoldenVector( int idx, VECTOR_DATA *data, int enMidRandom )
 {
 	uint8_t select0, select1, shift = 0;
 	int32_t offset = 0;
-#if 1
-	//	midstate
-	sha256_ctx ctx;
-	uint8_t temp[64];
-	uint32_t *data32 = (uint32_t*)temp;
+	uint8_t midstate[32];
+	int golenMidstate = 0;
 
-	flip64(data32, gstGoldenData[idx].header);
-	sha256_init(&ctx);
-	sha256_update(&ctx, temp, 64);
-	memcpy(data->midState, ctx.h, 32);
-#else
-	sha256( gstGoldenData[idx].header, 64, data->midState);
-#endif
+	//	calculate midstate
+	{
+		sha256_ctx ctx;
+		uint8_t temp[64];
+		uint32_t *data32 = (uint32_t*)temp;
+
+		flip64(data32, gstGoldenData[idx].header);
+		sha256_init(&ctx);
+		sha256_update(&ctx, temp, 64);
+		memcpy(midstate, ctx.h, 32);
+	}
+
+	//	Make random error except selected index
+	if( enMidRandom )
+	{
+		golenMidstate = random() % 4;
+		memset( data, 0, sizeof(VECTOR_DATA) );
+		switch( golenMidstate )
+		{
+			case 0:
+				memcpy(data->midState, midstate, 32);
+
+				memcpy(data->midState + 32 * 1, midstate, 30);
+				memcpy(data->midState + 32 * 2, midstate, 30);
+				memcpy(data->midState + 32 * 3, midstate, 30);
+				break;
+			case 1:
+				memcpy(data->midState, midstate, 30);
+				memcpy(data->midState + 32 * 1, midstate, 32);
+				memcpy(data->midState + 32 * 2, midstate, 30);
+				memcpy(data->midState + 32 * 3, midstate, 30);
+				break;
+			case 2:
+				memcpy(data->midState, midstate, 30);
+				memcpy(data->midState + 32 * 1, midstate, 30);
+				memcpy(data->midState + 32 * 2, midstate, 32);
+				memcpy(data->midState + 32 * 3, midstate, 30);
+				break;
+			case 3:
+				memcpy(data->midState, midstate, 30);
+				memcpy(data->midState + 32 * 1, midstate, 30);
+				memcpy(data->midState + 32 * 2, midstate, 30);
+				memcpy(data->midState + 32 * 3, midstate, 32);
+				break;
+		}
+	}
+	//	default
+	else
+	{
+		memcpy(data->midState, midstate, 32);
+		memcpy(data->midState + 32 * 1, midstate, 32);
+		memcpy(data->midState + 32 * 2, midstate, 32);
+		memcpy(data->midState + 32 * 3, midstate, 32);
+	}
 
 	//	parameter
 	offset = 64;	//	Jump to Mekle Root Tail
 
+	//	Mekle Root Tail + Time Stamp + Difficulty
 	memcpy( data->parameter, gstGoldenData[idx].header + offset, 12 );
 
 	//	target : nBits + 
@@ -587,6 +660,11 @@ void GetGoldenVector( int idx, VECTOR_DATA *data )
 	data->target[4] = select0;
 	data->target[5] = select1<<4 | (shift&0xF);
 
+	offset = 64 + 12;
+	//	Fill Hash
+	memcpy( data->hash, gstGoldenData[idx].hash, sizeof(gstGoldenData[idx].hash) );
+	//	Fill Golden Nonce
+	memcpy( data->nonce, gstGoldenData[idx].header + offset, 4 );
 
 	//	make full range nonce
 	data->startNonce[0] = 0x00;
@@ -600,15 +678,20 @@ void GetGoldenVector( int idx, VECTOR_DATA *data )
 	data->endNonce[3] = 0xff;
 
 	printf("=======================================\n");
+	printf("Input Vector (%d):\n", idx);
 	DumpGoldenVector(&gstGoldenData[idx]);
 	printf("=======================================\n");
+	printf("Input Prameter : Golden Midstate = %d\n", golenMidstate);
 	DumpVectorData(data);
 	printf("=======================================\n");
 }
 
 void GetBistVector( VECTOR_DATA *data )
 {
-	memcpy(data->midState, default_golden_midstate, sizeof(data->midState));
+	memcpy(data->midState+32*0, default_golden_midstate, 32);
+	memcpy(data->midState+32*1, default_golden_midstate, 32);
+	memcpy(data->midState+32*2, default_golden_midstate, 32);
+	memcpy(data->midState+32*3, default_golden_midstate, 32);
 	memcpy(data->parameter, default_golden_data, sizeof(data->parameter));
 	memcpy(data->target, default_golden_target, sizeof(data->target));
 	memcpy(data->startNonce, golden_nonce_start, sizeof(data->startNonce));

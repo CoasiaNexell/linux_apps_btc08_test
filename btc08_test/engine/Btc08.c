@@ -85,7 +85,7 @@ enum BTC08_cmd {
 #define OON_IRQ_ENB			(1 << 4)
 #define LAST_CHIP_FLAG		(1 << 15)
 
-#define HW_RESET_TIME			(50000)		//	50 msec
+#define HW_RESET_TIME			(200000)		//	50 msec
 
 #define GPIO_RESET_0	127
 #define GPIO_IRQ_OON_0	125
@@ -226,7 +226,7 @@ int Btc08ResetHW (BTC08_HANDLE handle, int32_t enable)
 	else
 	{
 		GpioSetValue( handle->hReset, 1 );
-		usleep( 50000 );	//	wait 50msec : FIXME: TODO:
+		usleep( HW_RESET_TIME );	//	wait 50msec : FIXME: TODO:
 	}
 
 	return 0;
@@ -449,9 +449,9 @@ int Btc08WriteParam  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *midState, ui
 	//	for ASIC Bootster
 	if( midState )
 	{
-		memcpy( handle->txBuf+txLen, midState, MIDSTATE_LEN );	txLen += MIDSTATE_LEN;
-		memcpy( handle->txBuf+txLen, midState, MIDSTATE_LEN );	txLen += MIDSTATE_LEN;
-		memcpy( handle->txBuf+txLen, midState, MIDSTATE_LEN );	txLen += MIDSTATE_LEN;
+		memcpy( handle->txBuf+txLen, midState + MIDSTATE_LEN*1, MIDSTATE_LEN );	txLen += MIDSTATE_LEN;
+		memcpy( handle->txBuf+txLen, midState + MIDSTATE_LEN*2, MIDSTATE_LEN );	txLen += MIDSTATE_LEN;
+		memcpy( handle->txBuf+txLen, midState + MIDSTATE_LEN*3, MIDSTATE_LEN );	txLen += MIDSTATE_LEN;
 	}
 
 	_WriteDummy(handle, txLen);
