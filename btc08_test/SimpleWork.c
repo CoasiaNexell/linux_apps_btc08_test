@@ -28,6 +28,7 @@ static void simplework_command_list()
 	printf("  1. Single Work\n");
 	printf("  2. Work Loop\n");
 	printf("    ex > 2 [number]\n");
+	printf("  3. Random Vector Loop\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -570,7 +571,7 @@ static int handleGN2(BTC08_HANDLE handle, uint8_t chipId, VECTOR_DATA *data)
 }
 
 
-static void TestWorkLoop_JobDist(int index)
+static void TestWorkLoop_RandomVector()
 {
 	int ii;
 	uint8_t chipId = 0x00, jobId = 0x01;
@@ -589,6 +590,7 @@ static void TestWorkLoop_JobDist(int index)
 	bool bGN = false;
 	VECTOR_DATA data;
 	uint32_t nonce = 0;
+	int index;
 
 	srand( (uint32_t)get_current_ms() );
 
@@ -783,13 +785,7 @@ void SimpleWorkLoop(void)
 		//----------------------------------------------------------------------
 		else if( !strcasecmp(cmd[0], "3") )
 		{
-			int index = 0;
-			if( cmdCnt > 1 )
-			{
-				index = strtol(cmd[1], 0, 10);
-			}
-			printf("numWork = %d\n", index);
-			TestWorkLoop_JobDist( index );
+			TestWorkLoop_RandomVector();
 		}
 	}
 }
