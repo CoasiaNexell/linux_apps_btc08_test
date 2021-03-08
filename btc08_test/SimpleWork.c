@@ -167,7 +167,7 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 	return ret;
 }
 
-static int handleOON(BTC08_HANDLE handle)
+static int handleOON(BTC08_HANDLE handle, uint8_t chipId)
 {
 	int ret = 0;
 	uint8_t res[4] = {0x00,};
@@ -190,7 +190,7 @@ static int handleOON(BTC08_HANDLE handle)
 		}
 		else
 		{
-			Btc08ClearOON(handle, BCAST_CHIP_ID);
+			Btc08ClearOON(handle, chipId);
 			ret = 0;
 		}
 	}
@@ -326,7 +326,7 @@ static void TestWork()
 				NxDbgMsg(NX_DBG_INFO, "%2s === OON IRQ on chip#%d for jobId#d!!! === [%ld.%lds]\n",
 						"", chipId, oon_job_id, ts_oon.tv_sec, ts_oon.tv_nsec);
 
-				handleOON(handle);
+				handleOON(handle, BCAST_CHIP_ID);
 				break;
 			} else {				// In case of not OON
 				NxDbgMsg(NX_DBG_INFO, "%2s === OON IRQ is not set!\n", "");
@@ -360,7 +360,14 @@ static void TestWorkLoop(int numWorks)
 	struct timespec ts_start, ts_oon, ts_gn, ts_diff, ts_last_oon;
 	uint64_t jobcnt = 0;
 	uint64_t hashes_done;
+	bool	ishashdone = false;
+	uint8_t hashdone_allchip[256];
+	uint8_t hashdone_chip[256];
+	uint64_t hashrate;
 	VECTOR_DATA data;
+
+	memset(hashdone_allchip, 0xFF, sizeof(hashdone_allchip));
+	memset(hashdone_chip,    0x00, sizeof(hashdone_chip));
 
 	tstimer_time(&ts_start);
 	NxDbgMsg(NX_DBG_INFO, "=== Start workloop === [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
@@ -437,72 +444,79 @@ static void TestWorkLoop(int numWorks)
 		jobcnt++;
 	}
 
-	while(1)
+	while(!ishashdone)
 	{
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_GN))	// Check GN GPIO pin
 		{
-			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
-			gn_job_id  = res[1];
-			gn_irq 	   = res[2] & (1<<0);
-			chipId     = res[3];
+			for (int i=1; i<=handle->numChips; i++)
+			{
+				Btc08ReadJobId(handle, i, res, res_size);
+				gn_job_id  = res[1];
+				gn_irq 	   = res[2] & (1<<0);
+				chipId     = res[3];
 
-			if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
-				tstimer_time(&ts_gn);
-				NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
-							"", chipId, gn_job_id, ts_gn.tv_sec, ts_gn.tv_nsec);
-				handleGN2(handle, chipId, &data);	//handleGN(handle, chipId, data.nonce);
-			} else {				// If GN IRQ is not set, then go to check OON
-				NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!\n", "");
+				if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
+					tstimer_time(&ts_gn);
+					NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
+								"", chipId, gn_job_id, ts_gn.tv_sec, ts_gn.tv_nsec);
+					handleGN2(handle, chipId, &data);	//handleGN(handle, i, data.nonce);
+				} else {				// If GN IRQ is not set, then go to check OON
+					//NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!!!\n", "");
+				}
 			}
 		}
 
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
 		{
-			// TODO: Need to check if it needs to read job id
-			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
-			oon_job_id = res[0];
-			oon_irq	   = res[2] & (1<<1);
-			chipId     = res[3];
+			for (int i=1; i<=handle->numChips; i++)
+			{
+				Btc08ReadJobId(handle, i, res, res_size);
+				oon_job_id = res[0];
+				oon_irq	   = res[2] & (1<<1);
+				chipId     = res[3];
 
-			if (0 != oon_irq) {				// If OON IRQ is set, handle OON
-				tstimer_time(&ts_oon);
-				NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
-							"", chipId, oon_job_id, ts_oon.tv_sec, ts_oon.tv_nsec);
+				if (0 != oon_irq) {				// If OON IRQ is set, handle OON
+					tstimer_time(&ts_oon);
+					NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
+								"", chipId, oon_job_id, ts_oon.tv_sec, ts_oon.tv_nsec);
 
-				handleOON(handle);
-				if (numWorks > jobcnt)
-				{
-					NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
-					Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
-					jobcnt++;
-					if (jobId > MAX_JOB_ID)
-						jobId = 1;
-				}
-				else {
-					uint64_t total_processed_works = (jobcnt - 2);
-					if (oon_job_id == (total_processed_works-1))
+					if (oon_job_id == numWorks)
+						hashdone_chip[chipId-1] = 0xFF;
+
+					handleOON(handle, i);
+					if (numWorks > jobcnt)
 					{
-						tstimer_time(&ts_last_oon);
-						tstimer_diff(&ts_last_oon, &ts_start, &ts_diff);
-
-						hashes_done = total_processed_works * 0x100000000;
-						uint64_t hashrate = hashes_done/(1024*1024) / ts_diff.tv_sec;
-						NxDbgMsg(NX_DBG_INFO, "Works = %llu, Hash = %llu MHash, Time = %ld, HashRate = %ld Mh/s\n",
-								total_processed_works, hashes_done/(1024*1024), ts_diff.tv_sec, hashrate);
+						NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
+						Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+						jobcnt++;
+						if (jobId > MAX_JOB_ID)
+							jobId = 1;
 					}
-					break;
+					else {
+						if (oon_job_id == numWorks)
+						{
+							int result = memcmp(hashdone_chip, hashdone_allchip, sizeof(uint8_t) * handle->numChips);
+							if (result == 0)
+							{
+								tstimer_time(&ts_last_oon);
+								tstimer_diff(&ts_last_oon, &ts_start, &ts_diff);
+								ishashdone = true;
+								break;
+							}
+						}
+					}
+				} else {						// OON IRQ is not set (cgminer: check OON timeout is expired)
+					//NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set! ===\n", "");
+					// if oon timeout is expired, disable chips
+					// if oon timeout is not expired, check oon gpio again
 				}
-			} else {						// OON IRQ is not set (cgminer: check OON timeout is expired)
-				NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set! ===\n", "");
-				// if oon timeout is expired, disable chips
-				// if oon timeout is not expired, check oon gpio again
 			}
 		}
-
 		sched_yield();
 	}
 
-	NxDbgMsg(NX_DBG_INFO, "Total works = %d\n", jobcnt);
+	// The expected hashrate = 600 mhash/sec [MinerCoreClk(50MHz) * NumOfChips(3chips) * AsicBoost(4)]
+	calc_hashrate(jobcnt, &ts_diff);
 
 	DestroyBtc08( handle );
 }
@@ -733,7 +747,7 @@ static void TestWorkLoop_RandomVector()
 			{
 				NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ on chip#%d!!! ===\n", "", chipId);
 
-				handleOON(handle);
+				handleOON(handle, BCAST_CHIP_ID);
 
 				if( bGN )
 				{
