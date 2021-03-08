@@ -15,6 +15,7 @@ void tstimer_time(struct timespec *ts);
 int tstimer_to_ms(struct timespec *ts);
 void tstimer_diff(struct timespec *end, struct timespec *start, struct timespec *res);
 uint64_t get_current_ms();
+double calc_hashrate(uint64_t jobcnt, struct timespec *ts_diff);
 
 void HexDump( const char *name, const void *data, int32_t size );
 
