@@ -34,6 +34,14 @@ AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
 AC_CHECK_TYPES([ptrdiff_t])
 
+# ARMv8 Cryptography Extension
+crypto_ext="yes"
+
+if test "x$crypto_ext" = xyes; then
+	AC_DEFINE([USE_CRYPTO_EXT], [1], [Defined to 1 if ARMv8 Cryptography Extension support is wanted])
+fi
+AM_CONDITIONAL([HAVE_CRYPTO_EXT], [test x$crypto_ext = xyes])
+
 # Checks for library functions.
 AC_FUNC_MALLOC
 

@@ -35,6 +35,7 @@
 #include <string.h>
 
 #include "sha2.h"
+#include "config.h"
 
 #ifdef USE_CRYPTO_EXT
 #include <arm_neon.h>
