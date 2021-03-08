@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <inttypes.h>
 
 #include "Utils.h"
 
@@ -87,6 +88,17 @@ uint64_t get_current_ms()
 	tstimer_time(&ts);
 	msec = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 	return msec;
+}
+
+double calc_hashrate(uint64_t jobcnt, struct timespec *ts_diff)
+{
+	uint64_t processed_hashes = jobcnt * 0x100000000;
+	uint64_t hashrate = (double)processed_hashes / (double)ts_diff->tv_sec / (1024 * 1024);
+
+	printf("HashRate = %ld mhash/sec (Works = %llu, Hashes = %"PRIu64" mhash, Total Time = %lds)\n",
+			hashrate, jobcnt, processed_hashes/(1024 * 1024), ts_diff->tv_sec);
+	
+	return hashrate;
 }
 
 void HexDump( const char *name, const void *data, int32_t size )
