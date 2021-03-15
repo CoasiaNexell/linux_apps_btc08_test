@@ -4,6 +4,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define ALIGN(x, a) (((x) + (a) - 1) & ~((a) - 1))
 
@@ -15,7 +16,7 @@ void tstimer_time(struct timespec *ts);
 int tstimer_to_ms(struct timespec *ts);
 void tstimer_diff(struct timespec *end, struct timespec *start, struct timespec *res);
 uint64_t get_current_ms();
-double calc_hashrate(uint64_t jobcnt, struct timespec *ts_diff);
+double calc_hashrate(bool isAsicBoost, uint64_t jobcnt, struct timespec *ts_diff);
 
 void HexDump( const char *name, const void *data, int32_t size );
 
