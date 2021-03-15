@@ -106,8 +106,15 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 
 	// Sequence 1. Read Hash
 	Btc08ReadHash(handle, chipId, hash, hash_size);
-
+	for (int i=0; i<4; i++)
+	{
+		ret = memcmp(default_golden_hash, &(hash[i*32]), 32);
+		if (ret == 0)
+			NxDbgMsg(NX_DBG_INFO, "%5s Hash matched of Inst_%s!!!\n", "",
+					(i==0) ? "Lower_3":(((i==1) ? "Lower_2": ((i==2) ? "Lower":"Upper"))));
+	}
 #if DEBUG
+//#if 1
 	for (int i=0; i<4; i++) {
 		sprintf(title, "Inst_%s", (i==0) ? "Lower_3":(((i==1) ? "Lower_2": ((i==2) ? "Lower":"Upper"))));
 		HexDump(title, &(hash[i*32]), 32);
@@ -115,18 +122,6 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 
 	HexDump("golden nonce:", golden_nonce, 4);
 #endif
-
-	for (int i=0; i<4; i++)
-	{
-		ret = memcmp(default_golden_hash, &(hash[i*32]), 32);
-		if (ret == 0)
-			NxDbgMsg(NX_DBG_INFO, "%5s Hash matched of Inst_%s!!!\n", "",
-					(i==0) ? "Lower_3":(((i==1) ? "Lower_2": ((i==2) ? "Lower":"Upper"))));
-		else
-			NxDbgMsg(NX_DBG_INFO, "%5s golden hash is %s found hash of Inst_%s\n", "",
-					(i==0) ? "Lower_3":(((i==1) ? "Lower_2": ((i==2) ? "Lower":"Upper"))),
-					(ret < 0) ? "less than":"greater than");
-	}
 
 	// Sequence 2. Read Result to read GN and clear GN IRQ
 	Btc08ReadResult(handle, chipId, res, res_size);
@@ -236,6 +231,8 @@ static void TestWork()
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);
 
+	handle->isAsicBoost = true;
+
 	// Seqeunce 2. Find number of chips : using AutoAddress
 	handle->numChips = Btc08AutoAddress(handle);
 	NxDbgMsg(NX_DBG_DEBUG, "%5s Number of Chips = %d\n", "", handle->numChips);
@@ -285,10 +282,10 @@ static void TestWork()
 	NxDbgMsg( NX_DBG_INFO, "=== RUN JOB ==\n");
 
 	// Sequence 11. Run Job
-	Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
-	Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
-	Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
-	Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+	Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+	Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+	Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+	Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
 	// Sequence 12. Check Interrupt Signals(GPIO) and Post Processing
 
 	//	FIXME : This loop is basically busy wait type,
@@ -350,7 +347,8 @@ static void TestWork()
  */
 static void TestWorkLoop(int numWorks)
 {
-	#define DIST_NONCE_RANGE 1
+	#define DIST_NONCE_RANGE 		1
+	#define DETAIL_CALC_HASHRATE	1
 
 	uint8_t chipId = 0x00, jobId = 0x01;
 	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id = 0x00;
@@ -377,6 +375,8 @@ static void TestWorkLoop(int numWorks)
 
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);
+
+	handle->isAsicBoost = true;
 
 	// Seqeunce 2. Find number of chips : using AutoAddress
 	handle->numChips = Btc08AutoAddress(handle);
@@ -440,7 +440,7 @@ static void TestWorkLoop(int numWorks)
 	for (int i = 0; i < MAX_JOB_FIFO_NUM; i++)
 	{
 		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
-		Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+		Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
 		jobcnt++;
 	}
 
@@ -459,7 +459,7 @@ static void TestWorkLoop(int numWorks)
 					tstimer_time(&ts_gn);
 					NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
 								"", chipId, gn_job_id, ts_gn.tv_sec, ts_gn.tv_nsec);
-					handleGN2(handle, chipId, &data);	//handleGN(handle, i, data.nonce);
+					handleGN(handle, i, data.nonce);
 				} else {				// If GN IRQ is not set, then go to check OON
 					//NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!!!\n", "");
 				}
@@ -468,9 +468,13 @@ static void TestWorkLoop(int numWorks)
 
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
 		{
+#ifdef DETAIL_CALC_HASHRATE
 			for (int i=1; i<=handle->numChips; i++)
 			{
 				Btc08ReadJobId(handle, i, res, res_size);
+#else
+				Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
+#endif
 				oon_job_id = res[0];
 				oon_irq	   = res[2] & (1<<1);
 				chipId     = res[3];
@@ -480,21 +484,26 @@ static void TestWorkLoop(int numWorks)
 					NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
 								"", chipId, oon_job_id, ts_oon.tv_sec, ts_oon.tv_nsec);
 
+#ifdef DETAIL_CALC_HASHRATE
 					if (oon_job_id == numWorks)
 						hashdone_chip[chipId-1] = 0xFF;
-
-					handleOON(handle, i);
-					if (numWorks > jobcnt)
+					int ret = handleOON(handle, i);
+#else
+					int ret = handleOON(handle, BCAST_CHIP_ID);
+#endif
+					if (ret == 0 && numWorks > jobcnt)
 					{
 						NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
-						Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+						Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
 						jobcnt++;
 						if (jobId > MAX_JOB_ID)
 							jobId = 1;
 					}
 					else {
+#ifdef DETAIL_CALC_HASHRATE
 						if (oon_job_id == numWorks)
 						{
+#endif
 							int result = memcmp(hashdone_chip, hashdone_allchip, sizeof(uint8_t) * handle->numChips);
 							if (result == 0)
 							{
@@ -503,7 +512,9 @@ static void TestWorkLoop(int numWorks)
 								ishashdone = true;
 								break;
 							}
+#ifdef DETAIL_CALC_HASHRATE
 						}
+#endif
 					}
 				} else {						// OON IRQ is not set (cgminer: check OON timeout is expired)
 					//NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set! ===\n", "");
@@ -515,8 +526,8 @@ static void TestWorkLoop(int numWorks)
 		sched_yield();
 	}
 
-	// The expected hashrate = 600 mhash/sec [MinerCoreClk(50MHz) * NumOfChips(3cores) * AsicBoost(4sub-cores)]
-	calc_hashrate(jobcnt, &ts_diff);
+	// The expected hashrate = 600 mhash/sec [MinerCoreClk(50MHz) * NumOfCores(3cores) * AsicBoost(4sub-cores)]
+	calc_hashrate(handle->isAsicBoost, jobcnt, &ts_diff);
 
 	DestroyBtc08( handle );
 }
@@ -652,6 +663,8 @@ static void TestWorkLoop_RandomVector()
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);
 
+	handle->isAsicBoost = true;
+
 	// Seqeunce 2. Find number of chips : using AutoAddress
 	handle->numChips = Btc08AutoAddress(handle);
 	NxDbgMsg(NX_DBG_INFO, "(Before last chip) Number of Chips = %d\n", handle->numChips);
@@ -707,7 +720,7 @@ static void TestWorkLoop_RandomVector()
 		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId = %d\n", "", jobId);
 		Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
 		FindNextTimeStamp( data.parameter );
-		Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+		Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
 	}
 
 	while(1)
@@ -762,7 +775,7 @@ static void TestWorkLoop_RandomVector()
 				currTime = get_current_ms();
 				totalTime = currTime - startTime;
 
-				megaHash = totalProcessedHash / (1024*1024);
+				megaHash = totalProcessedHash / (1000*1000);
 				NxDbgMsg(NX_DBG_INFO, "AVG : %.2f MHash/s,  Hash = %.2f GH, Time = %.2f sec, delta = %lld msec\n",
 						megaHash * 1000. / totalTime, megaHash/1024, totalTime/1000. , currTime - prevTime );
 
@@ -770,7 +783,7 @@ static void TestWorkLoop_RandomVector()
 
 				NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId = %d\n", "", jobId);
 				Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
-				Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, jobId++);
+				Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
 				FindNextTimeStamp( data.parameter );
 				if (jobId >= MAX_JOB_ID)		// [7:0] job id ==> 8bits (max 256)
 					jobId = 1;

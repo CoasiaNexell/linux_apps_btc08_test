@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <GpioControl.h>
 #include <Spi.h>
+#include <stdbool.h>
 
 #define BCAST_CHIP_ID		0x00
 #define ASIC_BOOST_EN		(0x02)
@@ -49,6 +50,8 @@ struct tag_BTC08_INFO{
 	GPIO_HANDLE		hGn;
 	GPIO_HANDLE		hOon;
 	SPI_HANDLE		hSpi;
+
+	bool			isAsicBoost;
 
 	int32_t			numChips;
 	int32_t			numCores[MAX_CHIPS];

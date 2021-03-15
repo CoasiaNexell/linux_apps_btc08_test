@@ -90,14 +90,21 @@ uint64_t get_current_ms()
 	return msec;
 }
 
-double calc_hashrate(uint64_t jobcnt, struct timespec *ts_diff)
+double calc_hashrate(bool isAsicBoost, uint64_t jobcnt, struct timespec *ts_diff)
 {
-	uint64_t processed_hashes = jobcnt * 0x100000000;
-	uint64_t hashrate = (double)processed_hashes / (double)ts_diff->tv_sec / (1024 * 1024);
+	uint64_t processed_hashes;
+	double hashrate;
 
-	printf("HashRate = %ld mhash/sec (Works = %llu, Hashes = %"PRIu64" mhash, Total Time = %lds)\n",
-			hashrate, jobcnt, processed_hashes/(1024 * 1024), ts_diff->tv_sec);
-	
+	if (isAsicBoost)
+		processed_hashes = (uint64_t)jobcnt * 4 * 0x100000000ull;
+	else
+		processed_hashes = (uint64_t)jobcnt * 0x100000000ull;
+
+	hashrate = (double)processed_hashes / (double)ts_diff->tv_sec / (1000 * 1000);
+
+	printf("HashRate = %.1f mhash/sec (Works = %llu, Hashes = %"PRIu64" mhash, Total Time = %lds)\n",
+			hashrate, jobcnt, processed_hashes/(1000 * 1000), ts_diff->tv_sec);
+
 	return hashrate;
 }
 
