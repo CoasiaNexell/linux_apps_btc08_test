@@ -3,8 +3,10 @@
 #include <string.h>
 #include <byteswap.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include "sha2.h"
+#include "Utils.h"
 #include "TestVector.h"
 
 /* GOLDEN_MIDSTATE */
@@ -547,6 +549,130 @@ static void DumpVectorData( VECTOR_DATA *data )
 	}
 }
 
+static bool set_vmask(int *vmask_003)
+{
+	int mask, tmpMask = 0, cnt = 0, i, rem;
+	const char *version_mask = "1fffe000";
+
+	mask = strtol(version_mask, NULL, 16);
+	if (!mask)
+		return false;
+
+	vmask_003[0] = mask;
+
+	while (mask % 16 == 0) {
+		cnt++;
+		mask /= 16;
+	}
+
+	if ((rem = mask % 16))
+		tmpMask = rem;
+	else if ((rem = mask % 8))
+		tmpMask = rem;
+	else if ((rem = mask % 4))
+		tmpMask = rem;
+	else if ((rem = mask % 2))
+		tmpMask = rem;
+
+	for (i = 0; i < cnt; i++)
+		tmpMask *= 16;
+
+	vmask_003[2] = tmpMask;
+	vmask_003[1] = vmask_003[0] - tmpMask;
+
+	return true;
+}
+
+static void get_vmask(char *bbversion, int *vmask_003, uint32_t *vmask_001)
+{
+	char defaultStr[9]= "00000000";
+	int bversion, num_bits, i, j;
+	uint8_t buffer[4] = {};
+	uint32_t uiMagicNum;
+	char *tmpstr;
+	uint32_t *p1;
+
+	p1 = (uint32_t *)buffer;
+	bversion = strtol(bbversion, NULL, 16);
+
+	for (i = 0; i < 4; i++) {
+		uiMagicNum = bversion | vmask_003[i];
+		*p1 = bswap_32(uiMagicNum);
+
+		switch(i) {
+			case 0:
+				vmask_001[8] = *p1;
+				break;
+			case 1:
+				vmask_001[4] = *p1;
+				break;
+			case 2:
+				vmask_001[2] = *p1;
+				break;
+			case 3:
+				vmask_001[0] = *p1;
+				break;
+			default:
+				break;
+		}
+	}
+
+	for (i = 0; i < 16; i++) {
+		if ((i!= 2) && (i!=4) && (i!=8)) {
+			vmask_001[i] = vmask_001[0];
+		}
+		else {
+			printf("####### vmask_001[%d]=%02x\n", i, vmask_001[i]);
+		}
+	}
+}
+
+static void calc_midstate(uint8_t *golden_header, uint32_t *vmask_001,
+	uint8_t *midstate, uint8_t *midstate1, uint8_t *midstate2, uint8_t *midstate3)
+{
+	unsigned char header[128];
+	unsigned char data[64];
+	uint32_t *data32 = (uint32_t *)data;
+	sha256_ctx ctx;
+
+	memset(header, 0, sizeof(header));
+	memcpy(header, golden_header, 80/*except padding*/);
+
+	if (vmask_001)
+	{
+		printf("####### vmask_001\n");
+		/* This would only be set if the driver requested a vmask and
+		 * the pool has a valid version mask. */
+		// vmask_001[2] = 0x00E0_0020
+		memcpy(header, &(vmask_001[2]), 4);
+		flip64(data32, header);
+		sha256_init(&ctx);
+		sha256_update(&ctx, data, 64);
+		cg_memcpy(midstate1, ctx.h, 32);
+
+		// vmask_001[4] = 0x0000_FF3F
+		memcpy(header, &(vmask_001[4]), 4);
+		flip64(data32, header);
+		sha256_init(&ctx);
+		sha256_update(&ctx, data, 64);
+		cg_memcpy(midstate2, ctx.h, 32);
+
+		// vmask_001[8] = 0x00E0_FF3F
+		memcpy(header, &(vmask_001[8]), 4);
+		flip64(data32, header);
+		sha256_init(&ctx);
+		sha256_update(&ctx, data, 64);
+		cg_memcpy(midstate3, ctx.h, 32);
+
+		// vmask_001[0] = 0x0000_0020
+		memcpy(header, &(vmask_001[0]), 4);
+	}
+
+	flip64(data32, header);
+	sha256_init(&ctx);
+	sha256_update(&ctx, data, 64);
+	cg_memcpy(midstate, ctx.h, 32);
+}
 
 //
 //						Find Target for BTC08
@@ -652,6 +778,79 @@ void GetGoldenVector( int idx, VECTOR_DATA *data, int enMidRandom )
 
 	offset = 64 + 8;
 	memcpy( data->target, gstGoldenData[idx].header + offset, 4 );
+	select0 = (data->target[0] / 4) - 1;
+	select1 = (data->target[0] % 4) + 1;
+	data->target[4] = select0;
+	data->target[5] = select1<<4 | (shift&0xF);
+
+	offset = 64 + 12;
+	//	Fill Hash
+	memcpy( data->hash, gstGoldenData[idx].hash, sizeof(gstGoldenData[idx].hash) );
+	//	Fill Golden Nonce
+	memcpy( data->nonce, gstGoldenData[idx].header + offset, 4 );
+
+	//	make full range nonce
+	data->startNonce[0] = 0x00;
+	data->startNonce[1] = 0x00;
+	data->startNonce[2] = 0x00;
+	data->startNonce[3] = 0x00;
+
+	data->endNonce[0] = 0xff;
+	data->endNonce[1] = 0xff;
+	data->endNonce[2] = 0xff;
+	data->endNonce[3] = 0xff;
+
+	printf("=======================================\n");
+	printf("Input Vector (%d):\n", idx);
+	DumpGoldenVector(&gstGoldenData[idx]);
+	printf("=======================================\n");
+	printf("Input Prameter : Golden Midstate = %d\n", golenMidstate);
+	DumpVectorData(data);
+	printf("=======================================\n");
+}
+
+void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
+{
+	uint8_t select0, select1, shift = 0;
+	int32_t offset = 0;
+	uint8_t midstate[32], midstate1[32], midstate2[32], midstate3[32];
+	int golenMidstate = 0;
+
+	//	calculate midstate with version rolling
+	int vmask_003[4];
+	uint32_t vmask_001[16];
+	char *bbversion;
+
+	set_vmask(vmask_003);
+	bbversion = bin2hex(gstGoldenData[idx].header, 4);
+
+	get_vmask(bbversion, vmask_003, vmask_001);
+	calc_midstate (gstGoldenData[idx].header, vmask_001,
+					midstate, midstate1, midstate2, midstate3);
+
+	memset(data, 0, sizeof(VECTOR_DATA));
+
+	memcpy(data->midState, midstate, 32);
+	memcpy(data->midState + 32 * 1, midstate1, 32);
+	memcpy(data->midState + 32 * 2, midstate2, 32);
+	memcpy(data->midState + 32 * 3, midstate3, 32);
+
+	//	parameter
+	offset = 64;	//	Jump to Mekle Root Tail
+
+	// 96bits for Merkle Root, Time Stamp, Difficulty
+	memcpy( data->parameter, gstGoldenData[idx].header + offset, 12 );
+
+	//	[47:16] : Target (32 bit)
+	//	[11:0] : Select (12 bit)
+	// 		[11:8] : Select0   // 256 bits를 64 bits 단위로 7개로 구분
+	//		[7:4]  : Select1   // 64 bits를 32 bits 단위로 5개로 구분
+	//		[3:0]  : Shift
+	offset = 64 + 8;
+	// Need to calc target from nbit
+	memcpy( data->target, gstGoldenData[idx].header + offset, 4 );
+	for (int i=0; i<4; i++)
+		printf("target=%02x:\n", data->target[i]);
 	select0 = (data->target[0] / 4) - 1;
 	select1 = (data->target[0] % 4) + 1;
 	data->target[4] = select0;

@@ -108,6 +108,26 @@ double calc_hashrate(bool isAsicBoost, uint64_t jobcnt, struct timespec *ts_diff
 	return hashrate;
 }
 
+void _cg_memcpy(void *dest, const void *src, unsigned int n, const char *file, const char *func, const int line)
+{
+	if (n < 1 || n > (1ul << 31)) {
+		printf("ERR: Asked to memcpy %u bytes from %s %s():%d\n",
+		       n, file, func, line);
+		return;
+	}
+	if (!dest) {
+		printf("ERR: Asked to memcpy %u bytes to NULL from %s %s():%d\n",
+		       n, file, func, line);
+		return;
+	}
+	if (!src) {
+		printf("ERR: Asked to memcpy %u bytes from NULL from %s %s():%d\n",
+		       n, file, func, line);
+		return;
+	}
+	memcpy(dest, src, n);
+}
+
 void HexDump( const char *name, const void *data, int32_t size )
 {
 	int32_t i=0, offset = 0;

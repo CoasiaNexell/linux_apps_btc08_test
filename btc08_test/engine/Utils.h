@@ -7,6 +7,7 @@
 #include <stdbool.h>
 
 #define ALIGN(x, a) (((x) + (a) - 1) & ~((a) - 1))
+#define cg_memcpy(dest, src, n) _cg_memcpy(dest, src, n, __FILE__, __func__, __LINE__)
 
 void tvtime(struct timeval *tv);
 int timeval_to_ms(struct timeval *tv);

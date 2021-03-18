@@ -32,6 +32,7 @@ uint8_t golden_enable[32];
 
 void GetBistVector( VECTOR_DATA *data );
 void GetGoldenVector( int idx, VECTOR_DATA *data, int enMidRandom );
+void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom );
 
 #ifdef __cplusplus
 };
