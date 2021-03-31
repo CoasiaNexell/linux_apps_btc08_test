@@ -18,6 +18,10 @@
 #include "NX_DbgMsg.h"
 
 #define DEBUG	0
+#define USE_VECTOR_DATA         1
+#define DIST_NONCE_RANGE        1
+#define CHECK_LAST_OON          1
+#define DETAIL_CALC_HASHRATE    0
 
 static int numCores[MAX_CHIP_NUM] = {0,};
 static void DistributionNonce( BTC08_HANDLE handle );
@@ -53,6 +57,7 @@ static void RunBist( BTC08_HANDLE handle)
 	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
 	Btc08RunBist    (handle, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
 
+	NxDbgMsg( NX_DBG_INFO, "=== READ BIST ==\n");
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		// If it's not BUSY status, read the number of cores in next READ_BIST
@@ -61,21 +66,21 @@ static void RunBist( BTC08_HANDLE handle)
 			if ( (ret[0] & 1) == 0 )
 				break;
 			else
-				NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
+				NxDbgMsg( NX_DBG_DEBUG, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
 						chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
 
 			usleep( 300 );
 		}
 		ret = Btc08ReadBist(handle, chipId);
 		handle->numCores[chipId-1] = ret[1];
-		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
+		NxDbgMsg( NX_DBG_DEBUG, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
 					chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
 	}
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
-		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Number of jobs = %d\n", "",
-					chipId, (res[2]&7) );
+		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Number of cores = %d, Number of jobs = %d\n", "",
+					chipId, handle->numCores[chipId-1], (res[2]&7) );
 	}
 }
 
@@ -131,6 +136,12 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 #if DEBUG
 	HexDump("golden nonce:", golden_nonce, 4);
 	HexDump("read_result:", res, 18);
+	for (int i=0 ; i<4 ; i++)
+	{
+		NxDbgMsg( NX_DBG_INFO, "%5s [Inst_%s] : nonce = %02x %02x %02x %02x\n", "",
+			(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))),
+			*(res + i*4), *(res + i*4 + 1), *(res + i*4 + 2), *(res + i*4 + 3) );
+	}
 #endif
 	validCnt = res[16];
 	lower3   = ((res[17] & (1<<3)) != 0);
@@ -192,7 +203,7 @@ static int handleOON(BTC08_HANDLE handle, uint8_t chipId)
 
 
 /*
- * Process one work(nonce range: 2G) without asicboost
+ * Process one work(nonce range: 2G) with asicboost
  *  Sequence :
  *   1. Create Handle
  *   2. Find number of chips : using AutoAddress
@@ -208,12 +219,12 @@ static int handleOON(BTC08_HANDLE handle, uint8_t chipId)
  *   7. Run Job
  *   8. Check Interrupt Signals(GPIO) and Post Processing
  *      Post processing : actually don't need to current work.
+ * Test result
+ *  3 chips, core 2/1/2 : HashRate = 1010.6 mhash/sec (Works = 1, Hashes = 17179 mhash, Total Time = 17s)
+ *  3 chips, core 1/1/1 : HashRate = 592.4 mhash/sec  (Works = 1, Hashes = 17179 mhash, Total Time = 29s)
  */
 static void TestWork(uint8_t last_chipId)
 {
-	#define USE_VECTOR_DATA			1
-	#define DIST_NONCE_RANGE 		1
-
 	int chipId = 0x00, jobId=0x01;
 	struct timespec ts_start, ts_oon, ts_gn, ts_diff;
 	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id =0x00;
@@ -258,7 +269,7 @@ static void TestWork(uint8_t last_chipId)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
 		NxDbgMsg( NX_DBG_DEBUG, "%5s ChipId = %d, Number of jobs = %d\n",
-					"", chipId, (res[2]&7) );
+				"", chipId, (res[2]&7) );
 	}
 
 	// Sequence 5. Enable all cores
@@ -341,6 +352,24 @@ static void TestWork(uint8_t last_chipId)
 
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
 		{
+#if CHECK_LAST_OON
+			Btc08ReadJobId(handle,  handle->numChips, res, res_size);
+			oon_job_id = res[0];
+			oon_irq	  = res[2] & (1<<1);
+			chipId    = res[3];
+
+			if (0 != oon_irq) {		// In case of OON
+				if (chipId == handle->numChips)		// OON occures on chip#1 > chip#2 > chip#3
+				{
+					tstimer_time(&ts_oon);
+					NxDbgMsg(NX_DBG_INFO, "%2s === OON IRQ on chip#%d for oon_jobId#%d!!! === [%ld.%lds]\n",
+							"", chipId, oon_job_id, ts_oon.tv_sec, ts_oon.tv_nsec);
+
+					int ret = handleOON(handle, BCAST_CHIP_ID);
+					ishashdone = true;
+				}
+			}
+#else
 			for (int i=1; i<=handle->numChips; i++)
 			{
 				Btc08ReadJobId(handle, i, res, res_size);
@@ -371,6 +400,7 @@ static void TestWork(uint8_t last_chipId)
 					// if oon timeTestWorkLoop_JobDist
 				}
 			}
+#endif
 		}
 		sched_yield();
 	}
@@ -388,12 +418,12 @@ static void TestWork(uint8_t last_chipId)
 /* Process 4 works with asicboost at first.
  * If OON IRQ occurs, clear OON and then pass the additional work to job fifo.
  * If GN IRQ occurs, read GN and then clear GN IRQ.
+ * Test Results
+ * 3 chips, core 2/1/2: HashRate = 1010.6 mhash/sec (Works = 4, Hashes = 68719 mhash, Total Time = 68s)
+ * 3 chips, core 1/1/1: HashRate = 602.8 mhash/sec  (Works = 4, Hashes = 68719 mhash, Total Time = 114s)
  */
 static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 {
-	#define DIST_NONCE_RANGE 		1
-	#define DETAIL_CALC_HASHRATE	1
-
 	uint8_t chipId = 0x00, jobId = 0x01;
 	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id = 0x00;
 	uint8_t res[4] = {0x00,};
@@ -459,8 +489,7 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 	GetGoldenVector(4, &data, 0);
 	Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
-#if DIST_NONCE_RANGE
-	DistributionNonce(handle);		//	Distribution Nonce
+	DistributionNonce(handle);
 	for( int i=0; i<handle->numChips ; i++ )
 	{
 		NxDbgMsg( NX_DBG_INFO, "Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n", i, handle->numCores[i],
@@ -468,20 +497,15 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 			handle->endNonce[i][0], handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3] );
 		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
 	}
-#else
-	//uint8_t start_nonce[4] = { 0x60, 0x00, 0x00, 0x00 };
-	//uint8_t end_nonce[4]   = { 0x6f, 0xff, 0xff, 0xff };
-	uint8_t start_nonce[4] = { 0x00, 0x00, 0x00, 0x00 };
-	uint8_t end_nonce[4]   = { 0xff, 0xff, 0xff, 0xff };
-
-	Btc08WriteNonce(handle, BCAST_CHIP_ID, start_nonce, end_nonce);
-#endif
 
 	tstimer_time(&ts_start);
 	NxDbgMsg( NX_DBG_INFO, "=== RUN JOB === [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
 
 	// Sequence 9. Run job
+#if CHECK_LAST_OON
+#else
 	for (int i = 0; i < MAX_JOB_FIFO_NUM; i++)
+#endif
 	{
 		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
 		Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
@@ -511,8 +535,46 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 		}
 
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
+#if CHECK_LAST_OON
 		{
-#ifdef DETAIL_CALC_HASHRATE
+			Btc08ReadJobId(handle,  handle->numChips, res, res_size);
+			oon_job_id = res[0];
+			oon_irq	  = res[2] & (1<<1);
+			chipId    = res[3];
+
+			if (0 != oon_irq) {		// In case of OON
+				if (chipId == handle->numChips)		// OON occures on chip#1 > chip#2 > chip#3
+				{
+					tstimer_time(&ts_oon);
+					NxDbgMsg(NX_DBG_INFO, "%2s === OON IRQ on chip#%d for oon_jobId#%d!!! === [%ld.%lds]\n",
+							"", chipId, oon_job_id, ts_oon.tv_sec, ts_oon.tv_nsec);
+
+					int ret = handleOON(handle, BCAST_CHIP_ID);
+					if (ret == 0 && numWorks > jobcnt)
+					{
+						NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
+						Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+						jobcnt++;
+						if (jobId > MAX_JOB_ID)
+							jobId = 1;
+					}
+					else
+					{
+						NxDbgMsg(NX_DBG_INFO, "%2s ==== oon_job_id(%d), numWorks(%d), jobcnt(%d)\n", "", oon_job_id, numWorks, jobcnt);
+						if (oon_job_id == numWorks)
+						{
+							tstimer_time(&ts_last_oon);
+							tstimer_diff(&ts_last_oon, &ts_start, &ts_diff);
+							ishashdone = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+#else
+#if DETAIL_CALC_HASHRATE
+		{
 			for (int i=1; i<=handle->numChips; i++)
 			{
 				Btc08ReadJobId(handle, i, res, res_size);
@@ -528,7 +590,7 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 					NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
 								"", chipId, oon_job_id, ts_oon.tv_sec, ts_oon.tv_nsec);
 
-#ifdef DETAIL_CALC_HASHRATE
+#if DETAIL_CALC_HASHRATE
 					if (oon_job_id == numWorks)
 						hashdone_chip[chipId-1] = 0xFF;
 					int ret = handleOON(handle, i);
@@ -544,10 +606,10 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 							jobId = 1;
 					}
 					else {
-#ifdef DETAIL_CALC_HASHRATE
+						NxDbgMsg(NX_DBG_INFO, "%2s oon_job_id(%d) numWorks(%d), jobcnt(%d)\n", "", oon_job_id, numWorks, jobcnt);
+#if DETAIL_CALC_HASHRATE
 						if (oon_job_id == numWorks)
 						{
-#endif
 							int result = memcmp(hashdone_chip, hashdone_allchip, sizeof(uint8_t) * handle->numChips);
 							if (result == 0)
 							{
@@ -556,17 +618,24 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 								ishashdone = true;
 								break;
 							}
-#ifdef DETAIL_CALC_HASHRATE
 						}
+#else
+						tstimer_time(&ts_last_oon);
+						tstimer_diff(&ts_last_oon, &ts_start, &ts_diff);
+						ishashdone = true;
 #endif
 					}
-				} else {						// OON IRQ is not set (cgminer: check OON timeout is expired)
+				}
+				else {						// OON IRQ is not set (cgminer: check OON timeout is expired)
 					//NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set! ===\n", "");
 					// if oon timeout is expired, disable chips
 					// if oon timeout is not expired, check oon gpio again
 				}
+#if DETAIL_CALC_HASHRATE
 			}
 		}
+#endif
+#endif
 		sched_yield();
 	}
 
@@ -654,7 +723,7 @@ static int handleGN2(BTC08_HANDLE handle, uint8_t chipId, VECTOR_DATA *data)
 		if (ret == 0)
 		{
 			NxDbgMsg(NX_DBG_INFO, "%5s [%d] : Hash matched of Inst_%s!!!\n", "", i,
-					(i==0) ? "Lower_3":(((i==1) ? "Lower_2": ((i==2) ? "Lower":"Upper"))));
+					(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
 			bHash = true;
 		}
 	}
