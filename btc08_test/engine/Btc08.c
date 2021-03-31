@@ -152,14 +152,14 @@ BTC08_HANDLE CreateBtc08( int32_t index )
 	GPIO_HANDLE hGn = NULL;
 	if( index == 0 )
 	{
-		hSpi = CreateSpi( "/dev/spidev0.0", 0, 500000, 0, 8 );
+		hSpi = CreateSpi( "/dev/spidev0.0", 0, TX_RX_MAX_SPEED, 0, 8 );
 		gpioReset = GPIO_RESET_0;
 		gpioOon   = GPIO_IRQ_OON_0;
 		gpioGn    = GPIO_IRQ_GN_0;
 	}
 	else if( index == 1 )
 	{
-		hSpi = CreateSpi( "/dev/spidev2.0", 0, 500000, 0, 8 );
+		hSpi = CreateSpi( "/dev/spidev2.0", 0, TX_RX_MAX_SPEED, 0, 8 );
 		gpioReset = GPIO_RESET_1;
 		gpioOon   = GPIO_IRQ_OON_1;
 		gpioGn    = GPIO_IRQ_GN_1;
@@ -265,7 +265,8 @@ int	Btc08ReadId (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_
 
 	if( chipId == BCAST_CHIP_ID )
 	{
-		return 0;
+		NxDbgMsg(NX_DBG_ERR, "[%s] failed, wrong chip id\n", __FUNCTION__);
+		return -1;
 	}
 
 	handle->txBuf[0] = SPI_CMD_READ_ID;
@@ -313,6 +314,7 @@ int Btc08AutoAddress (BTC08_HANDLE handle)
 	rx = handle->rxBuf + txLen;
 	// rx[0]
 	// rx[1] : number of chips
+
 	return rx[1];
 }
 
