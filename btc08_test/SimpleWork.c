@@ -36,6 +36,7 @@ static void simplework_command_list()
 	printf("  2. Work Loop\n");
 	printf("    ex > 2 [numOfJobs(>=4)] [last_chipId(1~numChips)]\n");
 	printf("  3. Random Vector Loop\n");
+	printf("  4. Work Infinite Loop\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -102,27 +103,23 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 	uint8_t res[18] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 	bool lower3, lower2, lower, upper, validCnt;
-	int match;
 	uint32_t cal_gn;
-	uint32_t *res_32;
-	uint32_t swap16[4];
-	uint32_t nonce32[4];
-	uint32_t *default_gn = (uint32_t *)golden_nonce;
 	char title[512];
-	uint8_t zero[32];
-
-	memset(zero, 0x00, sizeof(zero));
 
 	// Sequence 1. Read Hash
 	Btc08ReadHash(handle, chipId, hash, hash_size);
 	for (int i=0; i<4; i++)
 	{
-		result = memcmp(zero, &(hash[i*32]), 32);		// matched default_golden_hash
-		if (result != 0)
+		result = memcmp(default_golden_hash, &(hash[i*32]), 32);
+		if (result == 0)
 			NxDbgMsg(NX_DBG_INFO, "%5s Result Hash of Inst_%s!!!\n", "",
 					(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
 		else
+		{
+			NxDbgMsg(NX_DBG_ERR, "%5s Failed: Result Hash of Inst_%s!!!\n", "",
+					(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
 			ret = -1;
+		}
 	}
 #if DEBUG
 	for (int i=0; i<4; i++) {
@@ -136,13 +133,6 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 #if DEBUG
 	HexDump("golden nonce:", golden_nonce, 4);
 	HexDump("read_result:", res, 18);
-	for (int i=0 ; i<4 ; i++)
-	{
-		NxDbgMsg( NX_DBG_INFO, "%5s [Inst_%s] : nonce = %02x %02x %02x %02x\n", "",
-			(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))),
-			*(res + i*4), *(res + i*4 + 1), *(res + i*4 + 2), *(res + i*4 + 3) );
-	}
-#endif
 	validCnt = res[16];
 	lower3   = ((res[17] & (1<<3)) != 0);
 	lower2   = ((res[17] & (1<<2)) != 0);
@@ -152,21 +142,23 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 	NxDbgMsg(NX_DBG_INFO, "%5s [%s %s %s %s found golden nonce ]\n", "",
 			lower3 ? "Inst_Lower_3,":"", lower2 ? "Inst_Lower_2,":"",
 			lower  ?   "Inst_Lower,":"", upper  ?   "Inst_Upper":"");
+#endif
 
-	res_32 = (uint32_t *)&(res[0]);
 	for (int i=0; i<4; i++)
 	{
-		nonce32[i] = res_32[i];
-		//swap16_(&nonce32[i], &res_32[i]);
-		result = memcmp((uint32_t *)&(zero[0]), &(nonce32[i]), 4);		// matched to *default_gn
-		if (result != 0)
-			NxDbgMsg(NX_DBG_INFO, "%5s read_golden_nonce of Inst_%s %10s GN 0x%08x \n", "",
+		result = memcmp(golden_nonce, res + i*4, 4);
+		if (result == 0)
+			NxDbgMsg(NX_DBG_INFO, "%5s [Inst_%s] %10s GN = %02x %02x %02x %02x \n", "",
 				(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))), "",
-				nonce32[i]);
+				*(res + i*4), *(res + i*4 + 1), *(res + i*4 + 2), *(res + i*4 + 3));
 		else
+		{
+			NxDbgMsg(NX_DBG_ERR, "%5s Failed: [Inst_%s] %10s GN = %02x %02x %02x %02x \n", "",
+				(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))), "",
+				*(res + i*4), *(res + i*4 + 1), *(res + i*4 + 2), *(res + i*4 + 3));
 			ret = -1;
+		}
 	}
-
 	return ret;
 }
 
@@ -344,7 +336,11 @@ static void TestWork(uint8_t last_chipId)
 				NxDbgMsg(NX_DBG_INFO, "%2s === GN IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
 						"", chipId, gn_job_id, ts_gn.tv_sec, ts_gn.tv_nsec);
 
-				handleGN(handle, chipId, golden_nonce);
+				if (handleGN(handle, chipId, golden_nonce) < 0)
+				{
+					NxDbgMsg( NX_DBG_ERR, "=== GN Read fail!!! ==\n");
+					break;
+				}
 			} else {						// In case of not GN
 				NxDbgMsg(NX_DBG_INFO, "%2s === H/W interrupt occured, but GN_IRQ value is not set!\n", "");
 			}
@@ -416,7 +412,7 @@ static void TestWork(uint8_t last_chipId)
 }
 
 /* Process 4 works with asicboost at first.
- * If OON IRQ occurs, clear OON and then pass the additional work to job fifo.
+ * If OON IRQ occurs, check READ_JOB_ID, clear OON and then pass the additional work to job fifo.
  * If GN IRQ occurs, read GN and then clear GN IRQ.
  * Test Results
  * 3 chips, core 2/1/2: HashRate = 1010.6 mhash/sec (Works = 4, Hashes = 68719 mhash, Total Time = 68s)
@@ -527,7 +523,12 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 					tstimer_time(&ts_gn);
 					NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
 								"", chipId, gn_job_id, ts_gn.tv_sec, ts_gn.tv_nsec);
-					handleGN(handle, i, data.nonce);
+					if (handleGN(handle, chipId, golden_nonce) < 0)
+					{
+						NxDbgMsg( NX_DBG_ERR, "=== GN Read fail!!! ==\n");
+						ishashdone = true;
+						break;
+					}
 				} else {				// If GN IRQ is not set, then go to check OON
 					//NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!!!\n", "");
 				}
@@ -623,6 +624,7 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 						tstimer_time(&ts_last_oon);
 						tstimer_diff(&ts_last_oon, &ts_start, &ts_diff);
 						ishashdone = true;
+						break;
 #endif
 					}
 				}
@@ -641,6 +643,152 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 
 	// The expected hashrate = 600 mhash/sec [MinerCoreClk(50MHz) * NumOfCores(3cores) * AsicBoost(4sub-cores)]
 	calc_hashrate(handle->isAsicBoost, jobcnt, &ts_diff);
+
+	if (oon_job_id != numWorks)
+		NxDbgMsg(NX_DBG_INFO, "=== Test Failed!!!");
+	else
+		NxDbgMsg(NX_DBG_INFO, "=== Test Succeed!!!");
+
+	DestroyBtc08( handle );
+}
+
+/* Process the works with asicboost.
+ * If OON IRQ occurs, clear OON and then pass the additional work to job fifo.
+ * If GN IRQ occurs, read GN and then clear GN IRQ.
+ * Test Results (Ignore 1~4th hashresults)
+ * 3 chips, core 2/1/2: HashRate = 1010.6 mhash/sec (Works = 4, Hashes = 68719 mhash, Total Time = 68s)
+ * 3 chips, core 1/1/1: HashRate = 602.8 mhash/sec  (Works = 4, Hashes = 68719 mhash, Total Time = 114s)
+ */
+static void TestWorkInfiniteLoop()
+{
+	uint8_t chipId = 0x00, jobId = 0x01;
+	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id = 0x00;
+	uint8_t res[4] = {0x00,};
+	uint8_t oon_jobid, gn_jobid;
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	bool isErr = false;
+	VECTOR_DATA data;
+	uint64_t startTime, currTime, deltaTime, prevTime;
+	uint64_t totalProcessedHash = 0;
+	double totalTime;
+	double megaHash;
+
+	// Seqeunce 1. Create Handle
+	BTC08_HANDLE handle = CreateBtc08(0);
+
+	Btc08ResetHW(handle, 1);
+	Btc08ResetHW(handle, 0);
+
+	handle->isAsicBoost = true;
+
+	// Seqeunce 2. Find number of chips : using AutoAddress
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "(Before last chip) Number of Chips = %d\n", handle->numChips);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	{
+		Btc08ReadId(handle, chipId, res, res_size);
+		NxDbgMsg( NX_DBG_DEBUG, "ChipId = %d, Number of jobs = %d\n",
+					chipId, (res[2]&7) );
+	}
+
+	// Sequence 3. Reset S/W
+	Btc08Reset(handle);
+
+	// Sequence 4. Set last chip
+	Btc08SetControl(handle, 1, LAST_CHIP);
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "(After last chip) Number of Chips = %d\n", handle->numChips);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	{
+		Btc08ReadId(handle, chipId, res, res_size);
+		NxDbgMsg( NX_DBG_DEBUG, "ChipId = %d, Number of jobs = %d\n",
+					chipId, (res[2]&7) );
+	}
+
+	// Sequence 5. Enable all cores
+	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
+
+	// Seqeunce 6. Find number of cores of individual chips
+	RunBist( handle );
+
+	// Sequence 7. Enable OON IRQ/Set UART divider
+	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
+
+	// Sequence 8. Setting parameters, target, nonce range
+	//GetGoldenVectorWithVMask(4, &data, 0);
+	GetGoldenVector(4, &data, 0);
+	Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
+	Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
+	DistributionNonce(handle);
+	for( int i=0; i<handle->numChips ; i++ )
+	{
+		NxDbgMsg( NX_DBG_INFO, "Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n", i, handle->numCores[i],
+			handle->startNonce[i][0], handle->startNonce[i][1], handle->startNonce[i][2], handle->startNonce[i][3],
+			handle->endNonce[i][0], handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3] );
+		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
+	}
+
+	// Sequence 9. Run job
+	for (int i = 0; i < MAX_JOB_FIFO_NUM; i++)
+	{
+		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
+		Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+	}
+
+	startTime = get_current_ms();
+	prevTime = startTime;
+
+	while(!isErr)
+	{
+		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_GN))	// Check GN GPIO pin
+		{
+			for (int i=1; i<=handle->numChips; i++)
+			{
+				Btc08ReadJobId(handle, i, res, res_size);
+				gn_job_id  = res[1];
+				gn_irq 	   = res[2] & (1<<0);
+				chipId     = res[3];
+
+				if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
+					if (handleGN(handle, chipId, golden_nonce) < 0)
+					{
+						NxDbgMsg( NX_DBG_ERR, "=== GN Read fail!!! ==\n");
+						isErr = true;
+						break;
+					}
+				} else {				// If GN IRQ is not set, then go to check OON
+					NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!!!\n", "");
+				}
+			}
+		}
+
+		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
+		{
+			Btc08ClearOON(handle, BCAST_CHIP_ID);
+
+			totalProcessedHash += 0x400000000;	//	0x100000000 * 4 (asic booster)
+
+			currTime = get_current_ms();
+			totalTime = currTime - startTime;
+
+			megaHash = totalProcessedHash / (1000*1000);
+			NxDbgMsg(NX_DBG_INFO, "AVG : %.2f MHash/s,  Hash = %.2f GH, Time = %.2f sec, delta = %lld msec\n",
+					megaHash * 1000. / totalTime, megaHash/1000, totalTime/1000. , currTime - prevTime );
+
+			prevTime = currTime;
+
+			NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
+			Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+			if (jobId > MAX_JOB_ID)
+				jobId = 1;
+		}
+		sched_yield();
+	}
+
+	if (isErr)
+		NxDbgMsg(NX_DBG_INFO, "=== Test Failed!!!");
+	else
+		NxDbgMsg(NX_DBG_INFO, "=== Test Succeed!!!");
 
 	DestroyBtc08( handle );
 }
@@ -963,6 +1111,10 @@ void SimpleWorkLoop(void)
 		else if( !strcasecmp(cmd[0], "3") )
 		{
 			TestWorkLoop_RandomVector();
+		}
+		else if( !strcasecmp(cmd[0], "4") )
+		{
+			TestWorkInfiniteLoop();
 		}
 	}
 }
