@@ -141,7 +141,10 @@ int SpiTransfer( SPI_HANDLE handle, uint8_t *tx, uint8_t *rx, int32_t txLen, int
 	tr.len           = len;					// Length of receive and transmit buffers in bytes.
 	tr.delay_usecs   = handle->delay;		// Sets the delay after a transfer before the chip select status is changed and
 											// the next transfer is triggered
-	tr.speed_hz      = handle->speed;		// Sets the bit-rate of the device
+	if ((tx[0] == 0x07) || (tx[0] == 0x09) || (tx[0] == 0x0B) || (tx[0] == 0x0E))
+		tr.speed_hz  = TX_MAX_SPEED;
+	else
+		tr.speed_hz  = handle->speed;		// Sets the bit-rate of the device
 	tr.bits_per_word = handle->bits;		// Sets the device wordsize.
 	tr.cs_change     = 1;					// If true, device is deselected after transfer ended and before a new transfer
 											// is started.

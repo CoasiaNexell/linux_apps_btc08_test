@@ -22,6 +22,9 @@
 
 #include <stdint.h>
 
+#define TX_RX_MAX_SPEED      (4 * 1000 * 1000)     //  4 MHz
+#define TX_MAX_SPEED        (20 * 1000 * 1000)     // 20 MHz
+
 typedef struct tag_SPI_INFO *SPI_HANDLE;
 
 SPI_HANDLE CreateSpi( const char *device, uint32_t mode, uint32_t speed, uint16_t delay, uint8_t bits );

@@ -38,8 +38,6 @@
 #define MAX_JOB_ID			256
 #define MAX_CHIP_NUM		22
 
-#define TX_RX_MAX_SPEED     (500 * 1000)			// 500KHz
-
 typedef struct tag_BTC08_INFO *BTC08_HANDLE;
 
 #define	SPI_MAX_TRANS	(1024)
