@@ -162,6 +162,55 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 	return ret;
 }
 
+static int handleGN3(BTC08_HANDLE handle, uint8_t chipId, uint8_t *found_nonce, uint8_t *micro_job_id)
+{
+	int ret = 0, result = 0;
+	uint8_t hash[128] = {0x00,};
+	unsigned int hash_size = sizeof(hash)/sizeof(hash[0]);
+	uint8_t res[18] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	bool lower3, lower2, lower, upper, validCnt;
+	uint32_t cal_gn;
+	char buf[512];
+
+	// Sequence 1. Read Hash
+	Btc08ReadHash(handle, chipId, hash, hash_size);
+	for (int i=0; i<4; i++)
+	{
+		result = memcmp(default_golden_hash, &(hash[i*32]), 32);
+		if (result == 0)
+		{
+			sprintf(buf, "Inst_%s", (i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
+			NxDbgMsg(NX_DBG_INFO, "%5s Result Hash of %s!!!\n", "", buf);
+#if DEBUG
+			HexDump(buf, &(hash[i*32]), 32);
+#endif
+		}
+	}
+
+	// Sequence 2. Read Result to read GN and clear GN IRQ
+	Btc08ReadResult(handle, chipId, res, res_size);
+#if DEBUG
+	HexDump("read_result:", res, 18);
+	validCnt = res[16];
+	lower3   = ((res[17] & (1<<3)) != 0);
+	lower2   = ((res[17] & (1<<2)) != 0);
+	lower    = ((res[17] & (1<<1)) != 0);
+	upper    = ((res[17] & (1<<0)) != 0);
+
+	NxDbgMsg(NX_DBG_INFO, "%5s [%s %s %s %s found golden nonce ]\n", "",
+			lower3 ? "Inst_Lower_3,":"", lower2 ? "Inst_Lower_2,":"",
+			lower  ?   "Inst_Lower,":"", upper  ?   "Inst_Upper":"");
+#endif
+
+	*micro_job_id = res[17];
+	for (int i=0; i<4; i++) {
+		memcpy(&(found_nonce[i*4]), &(res[i*4]), 4);
+	}
+
+	return ret;
+}
+
 static int handleOON(BTC08_HANDLE handle, uint8_t chipId)
 {
 	int ret = 0;
@@ -672,6 +721,8 @@ static void TestWorkInfiniteLoop()
 	uint64_t totalProcessedHash = 0;
 	double totalTime;
 	double megaHash;
+	uint8_t micro_job_id;
+	uint32_t found_nonce[4];
 
 	// Seqeunce 1. Create Handle
 	BTC08_HANDLE handle = CreateBtc08(0);
@@ -715,8 +766,8 @@ static void TestWorkInfiniteLoop()
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
 
 	// Sequence 8. Setting parameters, target, nonce range
-	//GetGoldenVectorWithVMask(4, &data, 0);
-	GetGoldenVector(4, &data, 0);
+	GetGoldenVectorWithVMask(4, &data, 0);
+	//GetGoldenVector(4, &data, 0);
 	Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
 	DistributionNonce(handle);
@@ -750,11 +801,32 @@ static void TestWorkInfiniteLoop()
 				chipId     = res[3];
 
 				if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
-					if (handleGN(handle, chipId, golden_nonce) < 0)
+					handleGN3(handle, chipId, (uint8_t *)found_nonce, &micro_job_id);
 					{
-						NxDbgMsg( NX_DBG_ERR, "=== GN Read fail!!! ==\n");
-						isErr = true;
-						break;
+						// verify nonce
+						VECTOR_DATA new_data;
+						memcpy(&new_data, &data, sizeof(VECTOR_DATA));
+						memset(new_data.hash, 0, 32);
+						memset(new_data.nonce, 0, 4);
+
+						for (int i=0; i<4; i++)
+						{
+							found_nonce[i] = bswap_32(found_nonce[i]);
+							if((micro_job_id & (1<<i)) != 0) {
+								NxDbgMsg(NX_DBG_INFO, "%5s found_gn = 0x%08x\n", "", found_nonce[i]);
+								memcpy(&new_data, &(vmask_001[(1<<i)]), 4);
+								if (!submit_nonce(&new_data, found_nonce[i]))
+								{
+									NxDbgMsg(NX_DBG_ERR, "%5s Failed: invalid nonce 0x%08x\n", "", found_nonce[i]);
+									isErr = true;
+									break;
+								}
+								else
+								{
+									NxDbgMsg(NX_DBG_INFO, "%5s Succeed: valid nonce 0x%08x\n", "", found_nonce[i]);
+								}
+							}
+						}
 					}
 				} else {				// If GN IRQ is not set, then go to check OON
 					NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!!!\n", "");
