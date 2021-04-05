@@ -80,6 +80,8 @@ typedef struct BLOCk_DATA_INFO {
 	uint8_t hash[32];		//	hash result
 } BLOCk_DATA_INFO;
 
+uint32_t vmask_001[16];
+
 static inline void flip64(void *dest_p, const void *src_p)
 {
 	uint32_t *dest = dest_p;
@@ -622,53 +624,51 @@ static void get_vmask(char *bbversion, int *vmask_003, uint32_t *vmask_001)
 			vmask_001[i] = vmask_001[0];
 		}
 		else {
-			printf("####### vmask_001[%d]=%02x\n", i, vmask_001[i]);
+			printf("vmask_001[%d]=%02x\n", i, vmask_001[i]);
 		}
 	}
 }
 
-static void calc_midstate(uint8_t *golden_header, uint32_t *vmask_001,
+static void calc_midstate(VECTOR_DATA *header, int idx, uint32_t *vmask_001,
 	uint8_t *midstate, uint8_t *midstate1, uint8_t *midstate2, uint8_t *midstate3)
 {
-	unsigned char header[128];
 	unsigned char data[64];
 	uint32_t *data32 = (uint32_t *)data;
 	sha256_ctx ctx;
 
-	memset(header, 0, sizeof(header));
-	memcpy(header, golden_header, 80/*except padding*/);
+	memset(header->data, 0, sizeof(header->data));
+	memcpy(header->data, gstGoldenData[idx].header, 80/*except padding*/);
 
 	if (vmask_001)
 	{
-		printf("####### vmask_001\n");
 		/* This would only be set if the driver requested a vmask and
 		 * the pool has a valid version mask. */
 		// vmask_001[2] = 0x00E0_0020
-		memcpy(header, &(vmask_001[2]), 4);
-		flip64(data32, header);
+		memcpy(header->data, &(vmask_001[2]), 4);
+		flip64(data32, header->data);
 		sha256_init(&ctx);
 		sha256_update(&ctx, data, 64);
 		cg_memcpy(midstate1, ctx.h, 32);
 
 		// vmask_001[4] = 0x0000_FF3F
-		memcpy(header, &(vmask_001[4]), 4);
-		flip64(data32, header);
+		memcpy(header->data, &(vmask_001[4]), 4);
+		flip64(data32, header->data);
 		sha256_init(&ctx);
 		sha256_update(&ctx, data, 64);
 		cg_memcpy(midstate2, ctx.h, 32);
 
 		// vmask_001[8] = 0x00E0_FF3F
-		memcpy(header, &(vmask_001[8]), 4);
-		flip64(data32, header);
+		memcpy(header->data, &(vmask_001[8]), 4);
+		flip64(data32, header->data);
 		sha256_init(&ctx);
 		sha256_update(&ctx, data, 64);
 		cg_memcpy(midstate3, ctx.h, 32);
 
 		// vmask_001[0] = 0x0000_0020
-		memcpy(header, &(vmask_001[0]), 4);
+		memcpy(header->data, &(vmask_001[0]), 4);
 	}
 
-	flip64(data32, header);
+	flip64(data32, header->data);
 	sha256_init(&ctx);
 	sha256_update(&ctx, data, 64);
 	cg_memcpy(midstate, ctx.h, 32);
@@ -809,26 +809,156 @@ void GetGoldenVector( int idx, VECTOR_DATA *data, int enMidRandom )
 	printf("=======================================\n");
 }
 
+static inline uint32_t swab32(uint32_t v)
+{
+	return bswap_32(v);
+}
+
+static inline void flip80(void *dest_p, const void *src_p)
+{
+	uint32_t *dest = dest_p;
+	const uint32_t *src = src_p;
+	int i;
+
+	for (i = 0; i < 20; i++)
+		dest[i] = swab32(src[i]);
+}
+
+static inline void swab256(void *dest_p, const void *src_p)
+{
+	uint32_t *dest = dest_p;
+	const uint32_t *src = src_p;
+
+	dest[0] = swab32(src[7]);
+	dest[1] = swab32(src[6]);
+	dest[2] = swab32(src[5]);
+	dest[3] = swab32(src[4]);
+	dest[4] = swab32(src[3]);
+	dest[5] = swab32(src[2]);
+	dest[6] = swab32(src[1]);
+	dest[7] = swab32(src[0]);
+}
+
+bool fulltest(const unsigned char *hash, const unsigned char *target)
+{
+	uint32_t *hash32 = (uint32_t *)hash;
+	uint32_t *target32 = (uint32_t *)target;
+	bool rc = true;
+	int i;
+
+	for (i = 28 / 4; i >= 0; i--) {
+		uint32_t h32tmp = le32toh(hash32[i]);
+		uint32_t t32tmp = le32toh(target32[i]);
+
+		if (h32tmp > t32tmp) {
+			rc = false;
+			break;
+		}
+		if (h32tmp < t32tmp) {
+			rc = true;
+			break;
+		}
+	}
+#ifdef DEBUG
+	unsigned char hash_swap[32], target_swap[32];
+	char *hash_str, *target_str;
+
+	swab256(hash_swap, hash);
+	swab256(target_swap, target);
+	hash_str = bin2hex(hash_swap, 32);
+	target_str = bin2hex(target_swap, 32);
+
+	printf("Proof: %s\nTarget: %s\nTrgVal? %s\n",
+		hash_str,
+		target_str,
+		rc ? "YES (hash <= target)" :
+				"no (false positive; hash > target)");
+
+	free(hash_str);
+	free(target_str);
+#endif
+	return rc;
+}
+
+/* To be used once the work has been tested to be meet diff1 and has had its
+ * nonce adjusted. Returns true if the work target is met. */
+bool submit_tested_work(VECTOR_DATA *data)
+{
+	if (!fulltest(data->hash, data->target)) {
+		printf("Failed. Share above target!\n");
+		return false;
+	}
+	return true;
+}
+
+static void regen_hash(VECTOR_DATA *data)
+{
+	uint32_t *data32 = (uint32_t *)(data->data);
+#ifdef DEBUG
+	printf("%s data32:0x%08x\n", __FUNCTION__, *data32);
+#endif
+	unsigned char swap[80];
+	uint32_t *swap32 = (uint32_t *)swap;
+	unsigned char hash1[32];
+
+	flip80(swap32, data32);
+	sha256(swap, 80, hash1);
+	sha256(hash1, 32, (unsigned char *)(data->hash));
+
+#ifdef DEBUG
+	DumpData("data->hash", data->hash, sizeof(data->hash));
+#endif
+}
+
+// Fills in the work nonce and builds the output data in data->hash
+static void rebuild_nonce(VECTOR_DATA *data, uint32_t nonce)
+{
+	uint32_t *work_nonce = (uint32_t *)(data->nonce);
+	*work_nonce = htole32(nonce);
+#ifdef DEBUG
+	printf("%s work_nonce:0x%08x\n", __FUNCTION__, *work_nonce);
+#endif
+
+	regen_hash(data);
+}
+
+bool test_nonce(VECTOR_DATA *data, uint32_t nonce)
+{
+	uint32_t *hash_32 = (uint32_t *)(data->hash + 28);
+	rebuild_nonce(data, nonce);
+	return (*hash_32 == 0);
+}
+
+bool submit_nonce(VECTOR_DATA *data, uint32_t nonce)
+{
+	if (test_nonce(data, nonce)) {
+		submit_tested_work(data);
+	}
+	else {
+		return false;
+	}
+
+	return true;
+}
+
 void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
 {
 	uint8_t select0, select1, shift = 0;
 	int32_t offset = 0;
 	uint8_t midstate[32], midstate1[32], midstate2[32], midstate3[32];
-	int golenMidstate = 0;
 
 	//	calculate midstate with version rolling
 	int vmask_003[4];
-	uint32_t vmask_001[16];
 	char *bbversion;
+
+	memset(data, 0, sizeof(VECTOR_DATA));
 
 	set_vmask(vmask_003);
 	bbversion = bin2hex(gstGoldenData[idx].header, 4);
 
 	get_vmask(bbversion, vmask_003, vmask_001);
-	calc_midstate (gstGoldenData[idx].header, vmask_001,
+	calc_midstate (data, idx, vmask_001,
 					midstate, midstate1, midstate2, midstate3);
-
-	memset(data, 0, sizeof(VECTOR_DATA));
 
 	memcpy(data->midState, midstate, 32);
 	memcpy(data->midState + 32 * 1, midstate1, 32);
@@ -849,18 +979,10 @@ void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
 	offset = 64 + 8;
 	// Need to calc target from nbit
 	memcpy( data->target, gstGoldenData[idx].header + offset, 4 );
-	for (int i=0; i<4; i++)
-		printf("target=%02x:\n", data->target[i]);
 	select0 = (data->target[0] / 4) - 1;
 	select1 = (data->target[0] % 4) + 1;
 	data->target[4] = select0;
 	data->target[5] = select1<<4 | (shift&0xF);
-
-	offset = 64 + 12;
-	//	Fill Hash
-	memcpy( data->hash, gstGoldenData[idx].hash, sizeof(gstGoldenData[idx].hash) );
-	//	Fill Golden Nonce
-	memcpy( data->nonce, gstGoldenData[idx].header + offset, 4 );
 
 	//	make full range nonce
 	data->startNonce[0] = 0x00;
@@ -877,7 +999,6 @@ void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
 	printf("Input Vector (%d):\n", idx);
 	DumpGoldenVector(&gstGoldenData[idx]);
 	printf("=======================================\n");
-	printf("Input Prameter : Golden Midstate = %d\n", golenMidstate);
 	DumpVectorData(data);
 	printf("=======================================\n");
 }
