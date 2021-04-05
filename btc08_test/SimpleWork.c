@@ -652,7 +652,7 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 	DestroyBtc08( handle );
 }
 
-/* Process the works with asicboost.
+/* Process the works with asicboost. (4 works > oon > 2 works > oon > 2 works > ...)
  * If OON IRQ occurs, clear OON and then pass the additional work to job fifo.
  * If GN IRQ occurs, read GN and then clear GN IRQ.
  * Test Results (Ignore 1~4th hashresults)
@@ -766,17 +766,21 @@ static void TestWorkInfiniteLoop()
 		{
 			Btc08ClearOON(handle, BCAST_CHIP_ID);
 
-			totalProcessedHash += 0x400000000;	//	0x100000000 * 4 (asic booster)
+			totalProcessedHash += 0x800000000;	//	0x100000000 * 2(works) * 4(asic booster)
 
 			currTime = get_current_ms();
 			totalTime = currTime - startTime;
 
 			megaHash = totalProcessedHash / (1000*1000);
-			NxDbgMsg(NX_DBG_INFO, "AVG : %.2f MHash/s,  Hash = %.2f GH, Time = %.2f sec, delta = %lld msec\n",
+			NxDbgMsg(NX_DBG_INFO, "AVG : %.2f MHash/s, Hash = %.2f GH, Time = %.2f sec, delta = %lld msec\n",
 					megaHash * 1000. / totalTime, megaHash/1000, totalTime/1000. , currTime - prevTime );
 
 			prevTime = currTime;
 
+			NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
+			Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+			if (jobId > MAX_JOB_ID)
+				jobId = 1;
 			NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
 			Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
 			if (jobId > MAX_JOB_ID)
