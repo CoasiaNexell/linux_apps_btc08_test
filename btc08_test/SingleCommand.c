@@ -388,7 +388,7 @@ static int TestWRDisable( BTC08_HANDLE handle )
 	{
 		NxDbgMsg( NX_DBG_INFO, "=== SET_DISABLE(chip%d) ==\n", chipId);
 
-		if (0 == Btc08SetDisable(handle, chipId, test_data3[chipId-1]))
+		if (0 == Btc08SetDisable(handle, chipId, test_data1[chipId-1]))
 		{
 			// RUN_BIST
 			Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
@@ -410,14 +410,14 @@ static int TestWRDisable( BTC08_HANDLE handle )
 
 			// READ_DISABLE
 			Btc08ReadDisable(handle, chipId, res, 32);
-			if (0 == memcmp(test_data3[chipId-1], res, 32))
+			if (0 == memcmp(test_data1[chipId-1], res, 32))
 			{
 				NxDbgMsg(NX_DBG_INFO, "=== %5s READ_DISABLE(chip#%d) OK ==\n", "", chipId);
 			}
 			else
 			{
 				NxDbgMsg(NX_DBG_INFO, "=== %5s READ_DISABLE(chip#%d) NOT OK ==\n", "", chipId);
-				HexDump("set_disable:", test_data3[chipId-1], 32);
+				HexDump("set_disable:", test_data1[chipId-1], 32);
 				sprintf(title, "chipId(%d) read_disable:", chipId);
 				HexDump(title, res, 32);
 			}
