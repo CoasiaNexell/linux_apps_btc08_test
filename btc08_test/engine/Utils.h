@@ -20,7 +20,7 @@ uint64_t get_current_ms();
 double calc_hashrate(bool isAsicBoost, uint64_t jobcnt, struct timespec *ts_diff);
 
 void HexDump( const char *name, const void *data, int32_t size );
-
+char *bin2hex(const unsigned char *p, size_t len);
 
 //------------------------------------------------------------------------------
 // Shell utils

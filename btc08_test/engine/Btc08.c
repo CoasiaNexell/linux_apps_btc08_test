@@ -55,6 +55,7 @@ enum BTC08_cmd {
 	SPI_CMD_READ_TEMP		= 0x14,
 	SPI_CMD_WRITE_NONCE		= 0x16,
 	SPI_CMD_READ_HASH		= 0x20,
+	SPI_CMD_READ_IO_CTRL    = 0x31,
 	SPI_CMD_READ_FEATURE	= 0x32,
 	SPI_CMD_READ_REVISION	= 0x33,
 	SPI_CMD_SET_PLL_FOUT_EN	= 0x34,
@@ -835,6 +836,42 @@ int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId, uint8_t* hash, uint8_
 	return 0;
 }
 
+int Btc08ReadIOCtrl(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size)
+{
+	uint8_t *rx;
+	size_t txLen = 2;
+
+	if (BCAST_CHIP_ID == chipId)
+	{
+		NxDbgMsg(NX_DBG_ERR, "[%s] failed, wrong chip id\n", __FUNCTION__);
+		return -1;
+	}
+
+	handle->txBuf[0] = SPI_CMD_READ_IO_CTRL;
+	handle->txBuf[1] = chipId;
+
+	_WriteDummy(handle, txLen);
+	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 16+DUMMY_BYTES) )
+	{
+		// SPI Error
+		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
+		return -1;
+	}
+
+	rx = handle->rxBuf + txLen;
+	// ret[0~2]  [127:104] Reserved
+	// ret[3~5]   [103:84] IS(0: CMOS input, 1: Schmitt Trigger Input)
+	//             [83:80] EXTCLK Pad Control (PS:[3], PE:[2], DS1[1], DS0[0])
+	// ret[6-7]    [79:64] SR(slew rate control)
+	// ret[8-9]    [63:48] PS(weak resistor control)
+	// ret[10-11]  [47:32] PE(Pull up/down enable)
+	// ret[12-13]  [31:16] DS1(drive strength)
+	// ret[14-15]   [15:0] DS0(drive strength)
+
+	memcpy(res, rx, res_size);
+
+	return 0;
+}
 
 int Btc08ReadFeature (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size)
 {

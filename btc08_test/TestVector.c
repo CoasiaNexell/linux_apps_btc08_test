@@ -92,34 +92,6 @@ static inline void flip64(void *dest_p, const void *src_p)
 		dest[i] = bswap_32(src[i]);
 }
 
-/* Adequate size s==len*2 + 1 must be alloced to use this variant */
-static void __bin2hex(char *s, const unsigned char *p, size_t len)
-{
-	int i;
-	static const char hex[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-
-	for (i = 0; i < (int)len; i++) {
-		*s++ = hex[p[i] >> 4];
-		*s++ = hex[p[i] & 0xF];
-	}
-	*s++ = '\0';
-}
-
-static char *bin2hex(const unsigned char *p, size_t len)
-{
-	ssize_t slen;
-	char *s;
-
-	slen = len * 2 + 1;
-	if (slen % 4)
-		slen += 4 - (slen % 4);
-	s = calloc(slen, 1);
-	__bin2hex(s, p, len);
-
-	return s;
-}
-
-
 //
 //	Block Header ( 128 Bytes )
 //

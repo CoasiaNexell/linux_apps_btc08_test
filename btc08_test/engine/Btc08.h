@@ -99,6 +99,7 @@ int Btc08SetControl  (BTC08_HANDLE handle, uint8_t chipId, uint32_t param);
 int Btc08ReadTemp    (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08WriteNonce  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *startNonce, uint8_t *endNonce);
 int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId, uint8_t* hash, uint8_t hash_size);
+int Btc08ReadIOCtrl(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08ReadFeature (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08ReadRevision(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08SetPllFoutEn(BTC08_HANDLE handle, uint8_t chipId, uint8_t fout);
