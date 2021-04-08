@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <byteswap.h>
 
 #include "Btc08.h"
 #include "Utils.h"
@@ -54,6 +55,7 @@ enum BTC08_cmd {
 	SPI_CMD_SET_CONTROL		= 0x12,	/* no response */
 	SPI_CMD_READ_TEMP		= 0x14,
 	SPI_CMD_WRITE_NONCE		= 0x16,
+	SPI_CMD_READ_DEBUGCNT	= 0x19,
 	SPI_CMD_READ_HASH		= 0x20,
 	SPI_CMD_READ_IO_CTRL    = 0x31,
 	SPI_CMD_READ_FEATURE	= 0x32,
@@ -832,6 +834,43 @@ int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId, uint8_t* hash, uint8_
 	// ret [64~95]  [511:256] Result Hash of Inst_Lower_2 (when no golden nonce, just 0)
 	// ret[96~127]    [255:0] Result Hash of Inst_Lower_3 (when no golden nonce, just 0)
 	memcpy(hash, rx, hash_size);
+
+	return 0;
+}
+
+int Btc08ReadDebugCnt(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size)
+{
+	uint8_t *rx;
+	size_t txLen = 2;
+
+	if (BCAST_CHIP_ID == chipId)
+	{
+		NxDbgMsg(NX_DBG_ERR, "[%s] failed, wrong chip id\n", __FUNCTION__);
+		return -1;
+	}
+
+	handle->txBuf[0] = SPI_CMD_READ_DEBUGCNT;
+	handle->txBuf[1] = chipId;
+
+	_WriteDummy(handle, txLen);
+	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 4+DUMMY_BYTES) )
+	{
+		// SPI Error
+		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
+		return -1;
+	}
+
+	rx = handle->rxBuf + txLen;
+	// rx[0-3] [31:0] DebugCnt
+
+	uint32_t debugcnt;
+	uint32_t *p1 = (uint32_t *)&(rx[0]);
+	debugcnt = *p1;
+	debugcnt = bswap_32(debugcnt);
+	NxDbgMsg(NX_DBG_ERR, " rx[0]=0x%02x, rx[1]=0x%02x, rx[2]=0x%02x, rx[3]=0x%02x debugcnt:%u(0x%08x)<==\n",
+				rx[0], rx[1], rx[2], rx[3], debugcnt, debugcnt);
+
+	memcpy(res, rx, res_size);
 
 	return 0;
 }

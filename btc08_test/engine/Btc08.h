@@ -26,8 +26,11 @@
 #include <stdbool.h>
 
 #define BCAST_CHIP_ID		0x00
-#define ASIC_BOOST_EN		(0x02)
-#define FIX_NONCE_MODE		(0x01)
+
+// RUN_JOB PARAM
+#define DEBUGCNT_ON         (1<<4)
+#define ASIC_BOOST_EN		(1<<1)
+#define FIX_NONCE_MODE		(1<<0)
 
 // SET_CONTROL Extra Bits
 #define LAST_CHIP		    (1<<15)
@@ -99,6 +102,7 @@ int Btc08SetControl  (BTC08_HANDLE handle, uint8_t chipId, uint32_t param);
 int Btc08ReadTemp    (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08WriteNonce  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *startNonce, uint8_t *endNonce);
 int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId, uint8_t* hash, uint8_t hash_size);
+int Btc08ReadDebugCnt(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08ReadIOCtrl(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08ReadFeature (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08ReadRevision(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
