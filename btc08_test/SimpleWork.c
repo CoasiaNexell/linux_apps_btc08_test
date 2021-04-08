@@ -85,6 +85,36 @@ static void RunBist( BTC08_HANDLE handle)
 	}
 }
 
+// PMS value setting sequnce
+static void SetPll(BTC08_HANDLE handle, int chipId, int pll_idx)
+{
+	uint8_t *ret;
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	int lock_status;
+
+	NxDbgMsg( NX_DBG_INFO, "=== SET PLL ==\n");
+
+	// seq1. Disable FOUT
+	Btc08SetPllFoutEn(handle, chipId, FOUT_EN_DISABLE);
+
+	// seq2. Down reset
+	Btc08SetPllResetB(handle, chipId, RESETB_RESET);
+
+	// seq3. Set PLL(change PMS value)
+	Btc08SetPllConfig(handle, pll_idx);
+
+	// seq4. wait for 1 ms
+	usleep( 1000 );
+
+	// seq5. Enable FOUT
+	Btc08SetPllFoutEn(handle, chipId, FOUT_EN_ENABLE);
+
+	// seq6. Check PLL lock
+	lock_status = Btc08ReadPll(handle, res, res_size);
+	NxDbgMsg(NX_DBG_ERR, "%5s [chip#%d] pll lock status: %s\n", "", chipId, (lock_status == 1) ? "locked":"unlocked");
+}
+
 /* 0x12345678 --> 0x56781234*/
 static inline void swap16_(void *dest_p, const void *src_p)
 {
@@ -315,6 +345,10 @@ static void TestWork(uint8_t last_chipId)
 
 	// Sequence 5. Enable all cores
 	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
+
+	// For Hashboard
+	//for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	//	SetPll(handle, chipId, 4);
 
 	// Seqeunce 6. Run BIST
 	RunBist( handle );

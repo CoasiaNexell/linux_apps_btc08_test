@@ -41,6 +41,12 @@
 #define MAX_JOB_ID			256
 #define MAX_CHIP_NUM		22
 
+#define FOUT_EN_DISABLE     0
+#define FOUT_EN_ENABLE      1
+
+#define RESETB_RESET        0
+#define RESETB_ON           1
+
 typedef struct tag_BTC08_INFO *BTC08_HANDLE;
 
 #define	SPI_MAX_TRANS	(1024)
@@ -87,7 +93,7 @@ int Btc08RunBist     (BTC08_HANDLE handle, uint8_t *hash, uint8_t *hash2, uint8_
 uint8_t * Btc08ReadBist    (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08Reset       (BTC08_HANDLE handle);			//	S/W Reset
 int Btc08SetPllConfig(BTC08_HANDLE handle, uint8_t idx);
-int Btc08ReadPll     (BTC08_HANDLE handle);
+int Btc08ReadPll     (BTC08_HANDLE handle, uint8_t* res, uint8_t res_size);
 int Btc08WriteParam  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *midState, uint8_t *param);
 int Btc08ReadParam   (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08WriteTarget (BTC08_HANDLE handle, uint8_t chipId, uint8_t *target);
