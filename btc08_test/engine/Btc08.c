@@ -62,6 +62,7 @@ enum BTC08_cmd {
 	SPI_CMD_READ_REVISION	= 0x33,
 	SPI_CMD_SET_PLL_FOUT_EN	= 0x34,
 	SPI_CMD_SET_PLL_RESETB 	= 0x35,
+	SPI_CMD_SET_TMODE       = 0x38,
 };
 
 #define DUMMY_BYTES         2
@@ -78,6 +79,7 @@ enum BTC08_cmd {
 #define DISABLE_LEN         32
 #define READ_RESULT_LEN     18
 
+#define TMODE_SEL_LEN       2
 #define ASIC_BOOST_CORE_NUM		4
 #define TOTAL_MIDSTATE_LEN		(MIDSTATE_LEN * ASIC_BOOST_CORE_NUM)
 #define TOTAL_HASH_LEN			(HASH_LEN * ASIC_BOOST_CORE_NUM)
@@ -1013,5 +1015,26 @@ int Btc08SetPllResetB(BTC08_HANDLE handle, uint8_t chipId, uint8_t reset)
 		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
 		return -1;
 	}
+	return 0;
+}
+
+int Btc08SetTmode (BTC08_HANDLE handle, uint8_t chipId, uint8_t *tmode_sel)
+{
+	size_t txLen = 0;
+	handle->txBuf[0] = SPI_CMD_SET_TMODE;
+	handle->txBuf[1] = chipId;
+
+	txLen += 2;
+	memcpy( handle->txBuf+txLen, tmode_sel, TMODE_SEL_LEN );
+	txLen += TMODE_SEL_LEN;
+
+	_WriteDummy(handle, txLen);
+	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DUMMY_BYTES ) )
+	{
+		// SPI Error
+		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
+		return -1;
+	}
+
 	return 0;
 }

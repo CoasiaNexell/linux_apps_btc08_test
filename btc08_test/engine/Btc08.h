@@ -108,5 +108,6 @@ int Btc08ReadFeature (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 int Btc08ReadRevision(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08SetPllFoutEn(BTC08_HANDLE handle, uint8_t chipId, uint8_t fout);
 int Btc08SetPllResetB(BTC08_HANDLE handle, uint8_t chipId, uint8_t reset);
+int Btc08SetTmode    (BTC08_HANDLE handle, uint8_t chipId, uint8_t *tmode_sel);
 
 #endif // _BTC08_H_
