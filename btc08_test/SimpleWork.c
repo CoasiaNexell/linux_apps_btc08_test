@@ -353,8 +353,6 @@ static void TestWork(uint8_t last_chipId)
 	}
 #else
 	// Sequence 10. Setting Nonce Range (To use 1 sec for 1 work, set nonce range '0x07ff_ffff')
-	//uint8_t start_nonce[4] = { 0x5e, 0xcb, 0x34, 0x27 };
-	//uint8_t end_nonce[4]   = { 0x66, 0xcb, 0x34, 0x26 };
 	uint8_t start_nonce[4] = { 0x00, 0x00, 0x00, 0x00 };
 	uint8_t end_nonce[4]   = { 0xff, 0xff, 0xff, 0xff };
 	Btc08WriteNonce(handle, BCAST_CHIP_ID, start_nonce, end_nonce);

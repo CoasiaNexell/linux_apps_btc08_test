@@ -81,17 +81,6 @@ typedef struct BLOCk_DATA_INFO {
 } BLOCk_DATA_INFO;
 
 uint32_t vmask_001[16];
-
-static inline void flip64(void *dest_p, const void *src_p)
-{
-	uint32_t *dest = dest_p;
-	const uint32_t *src = src_p;
-	int i;
-
-	for (i = 0; i < 16; i++)
-		dest[i] = bswap_32(src[i]);
-}
-
 //
 //	Block Header ( 128 Bytes )
 //

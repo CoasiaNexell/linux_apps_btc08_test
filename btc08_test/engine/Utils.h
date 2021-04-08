@@ -21,6 +21,7 @@ double calc_hashrate(bool isAsicBoost, uint64_t jobcnt, struct timespec *ts_diff
 
 void HexDump( const char *name, const void *data, int32_t size );
 char *bin2hex(const unsigned char *p, size_t len);
+void flip64(void *dest_p, const void *src_p);
 
 //------------------------------------------------------------------------------
 // Shell utils
