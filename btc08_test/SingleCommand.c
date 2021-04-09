@@ -29,7 +29,7 @@ static void singlecommand_command_list()
 	printf("  7. Set, Read disable\n");
 	printf("  8. Read Revision\n");
 	printf("  9. Read Feature\n");
-	printf("  10. Read IO Ctrl\n");
+	printf("  10. Read/Write IO Ctrl\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -549,36 +549,64 @@ static int TestIOCtrl( BTC08_HANDLE handle )
 	int numChips;
 	uint8_t res[16] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-	// 0xe0000_00008000_ffffffff
+	// default: 0x00000000_000e0000_00008000_ffffffff
+	// wr     : 0x00000000_0015ffff_ffff0000_00000000
 	uint8_t default_ioctrl[16] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0xff, 0xff, 0xff, 0xff};
-	uint32_t *rev;
+	uint8_t wr_ioctrl[16]      = {0x00, 0x00, 0x00, 0x00, 0x00, 0x15, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 	Btc08ResetHW( handle, 1 );
 	Btc08ResetHW( handle, 0 );
 
 	numChips = Btc08AutoAddress(handle);
 
-	// READ_IO_CTRL
+	// READ_IO_CTRL to read default value
 	for (int chipId = 1; chipId <= numChips; chipId++)
 	{
 		if (0 == Btc08ReadIOCtrl(handle, chipId, res, res_size))
 		{
-			if (0 == memcmp(default_ioctrl, res, 16))
+			if (0 != memcmp(default_ioctrl, res, 16))
 			{
-				char *ioctrl = bin2hex(res, sizeof(res)/sizeof(res[0]));
-				NxDbgMsg( NX_DBG_INFO, "=== READ_IO_CTRL(chip#%d) OK (%s) ==\n", chipId, ioctrl);
-				free(ioctrl);
-			}
-			else
-			{
-				NxDbgMsg( NX_DBG_INFO, "=== READ_IO_CTRL(chip#%d) NOT OK ==\n", chipId);
+				NxDbgMsg(NX_DBG_ERR, "=== Test1 Failed: READ_IO_CTRL(chip#%d) ==\n", chipId);
 				HexDump("READ_IOCTRL", res, 16);
 				HexDump("default_ioctrl", default_ioctrl, 16);
+				return -1;
 			}
 		}
 		else
-			NxDbgMsg(NX_DBG_INFO, "=== Failed to read ioctrl ==\n");
+		{
+			NxDbgMsg(NX_DBG_ERR, "=== Test1 Failed: READ_IO_CTRL with spi err ==\n");
+			return -1;
+		}
 	}
+
+	// WRITE_IO_CTRL
+	if (Btc08WriteIOCtrl(handle, BCAST_CHIP_ID, wr_ioctrl) < 0)
+	{
+		NxDbgMsg(NX_DBG_ERR, "=== Test Failed: WRITE_IO_CTRL ==\n");
+		return -1;
+	}
+
+	// READ_IO_CTRL to read the changed value
+	for (int chipId = 1; chipId <= numChips; chipId++)
+	{
+		if (0 == Btc08ReadIOCtrl(handle, chipId, res, res_size))
+		{
+			if (0 != memcmp(wr_ioctrl, res, 16))
+			{
+				NxDbgMsg(NX_DBG_ERR, "=== Test2 Failed: READ_IO_CTRL(chip#%d) ==\n", chipId);
+				HexDump("READ_IOCTRL", res, 16);
+				HexDump("wr_ioctrl", wr_ioctrl, 16);
+				return -1;
+			}
+		}
+		else
+		{
+			NxDbgMsg(NX_DBG_ERR, "=== Test2 Failed: READ_IO_CTRL with spi err ==\n");
+			return -1;
+		}
+	}
+
+	NxDbgMsg(NX_DBG_INFO, "=== Test Succeed: READ/WRITE_IOCTRL ==\n");
 
 	return 0;
 }
@@ -673,7 +701,7 @@ void SingleCommandLoop(void)
 			TestReadFeature(handle);
 		}
 		//----------------------------------------------------------------------
-		//	Read IO Ctrl Test
+		//	Read/Write IO Ctrl Test
 		else if ( !strcasecmp(cmd[0], "10") )
 		{
 			TestIOCtrl(handle);
