@@ -25,6 +25,7 @@
 #include <Spi.h>
 #include <stdbool.h>
 
+#include "TestVector.h"
 #define BCAST_CHIP_ID		0x00
 
 // RUN_JOB Param Bits
@@ -108,7 +109,6 @@ int Btc08ClearOON    (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08SetDisable  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *disable);
 int Btc08ReadDisable (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08SetControl  (BTC08_HANDLE handle, uint8_t chipId, uint32_t param);
-int Btc08ReadTemp    (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08WriteNonce  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *startNonce, uint8_t *endNonce);
 int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId, uint8_t* hash, uint8_t hash_size);
 int Btc08ReadDebugCnt(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);

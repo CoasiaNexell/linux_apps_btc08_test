@@ -53,7 +53,7 @@ enum BTC08_cmd {
 	SPI_CMD_SET_DISABLE		= 0x10,
 	SPI_CMD_READ_DISABLE	= 0x11,
 	SPI_CMD_SET_CONTROL		= 0x12,	/* no response */
-	SPI_CMD_READ_TEMP		= 0x14,
+	SPI_CMD_DEBUG           = 0x15,
 	SPI_CMD_WRITE_NONCE		= 0x16,
 	SPI_CMD_READ_DEBUGCNT	= 0x19,
 	SPI_CMD_READ_HASH		= 0x20,
@@ -791,22 +791,6 @@ int Btc08SetControl  (BTC08_HANDLE handle, uint8_t chipId, uint32_t param )
 	return 0;
 }
 
-
-int Btc08ReadTemp    (BTC08_HANDLE handle, uint8_t chipId )
-{
-	handle->txBuf[0] = SPI_CMD_READ_TEMP;
-	handle->txBuf[1] = chipId;
-
-	_WriteDummy(handle, 2);
-	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2, 2+DUMMY_BYTES ) )
-	{
-		// SPI Error
-		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
-		return -1;
-	}
-	return 0;
-}
-
 /* WRITE_NONCE to set the range of nonce range */
 int Btc08WriteNonce  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *startNonce, uint8_t *endNonce )
 {
@@ -836,7 +820,7 @@ int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId, uint8_t* hash, uint8_
 	handle->txBuf[1] = chipId;
 
 	_WriteDummy(handle, txLen);
-	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 128+DUMMY_BYTES) )
+	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, TOTAL_HASH_LEN+DUMMY_BYTES) )
 	{
 		// SPI Error
 		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
@@ -844,10 +828,11 @@ int Btc08ReadHash    (BTC08_HANDLE handle, uint8_t chipId, uint8_t* hash, uint8_
 	}
 
 	rx = handle->rxBuf + txLen;
-	// ret  [0~31] [1023:768] Result Hash of Inst_Upper (when no golden nonce, just 0)
-	// ret [32~63]  [767:512] Result Hash of Inst_Lower (when no golden nonce, just 0)
-	// ret [64~95]  [511:256] Result Hash of Inst_Lower_2 (when no golden nonce, just 0)
-	// ret[96~127]    [255:0] Result Hash of Inst_Lower_3 (when no golden nonce, just 0)
+	// rx  [0~31] [1023:768] Result Hash of Inst_Upper (when no golden nonce, just 0)
+	// rx [32~63]  [767:512] Result Hash of Inst_Lower (when no golden nonce, just 0)
+	// rx [64~95]  [511:256] Result Hash of Inst_Lower_2 (when no golden nonce, just 0)
+	// rx[96~127]    [255:0] Result Hash of Inst_Lower_3 (when no golden nonce, just 0)
+
 	memcpy(hash, rx, hash_size);
 
 	return 0;
@@ -865,6 +850,43 @@ int Btc08ReadDebugCnt(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 	}
 
 	handle->txBuf[0] = SPI_CMD_READ_DEBUGCNT;
+	handle->txBuf[1] = chipId;
+
+	_WriteDummy(handle, txLen);
+	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 4+DUMMY_BYTES) )
+	{
+		// SPI Error
+		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
+		return -1;
+	}
+
+	rx = handle->rxBuf + txLen;
+	// rx[0-3] [31:0] DebugCnt
+
+	uint32_t debugcnt;
+	uint32_t *p1 = (uint32_t *)&(rx[0]);
+	debugcnt = *p1;
+	debugcnt = bswap_32(debugcnt);
+	NxDbgMsg(NX_DBG_ERR, " rx[0]=0x%02x, rx[1]=0x%02x, rx[2]=0x%02x, rx[3]=0x%02x debugcnt:%u(0x%08x)<==\n",
+				rx[0], rx[1], rx[2], rx[3], debugcnt, debugcnt);
+
+	memcpy(res, rx, res_size);
+
+	return 0;
+}
+
+int Btc08Debug(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size)
+{
+	uint8_t *rx;
+	size_t txLen = 2;
+
+	if (BCAST_CHIP_ID == chipId)
+	{
+		NxDbgMsg(NX_DBG_ERR, "[%s] failed, wrong chip id\n", __FUNCTION__);
+		return -1;
+	}
+
+	handle->txBuf[0] = SPI_CMD_DEBUG;
 	handle->txBuf[1] = chipId;
 
 	_WriteDummy(handle, txLen);
