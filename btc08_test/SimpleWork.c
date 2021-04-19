@@ -9,8 +9,6 @@
 #include "Utils.h"
 #include "Btc08.h"
 
-#include "TestVector.h"
-
 #ifdef NX_DTAG
 #undef NX_DTAG
 #endif
@@ -192,7 +190,7 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 	return ret;
 }
 
-static int handleGN3(BTC08_HANDLE handle, uint8_t chipId, uint8_t *found_nonce, uint8_t *micro_job_id)
+static int handleGN3(BTC08_HANDLE handle, uint8_t chipId, uint8_t *found_nonce, uint8_t *micro_job_id, VECTOR_DATA *data)
 {
 	int ret = 0, result = 0;
 	uint8_t hash[128] = {0x00,};
@@ -207,7 +205,7 @@ static int handleGN3(BTC08_HANDLE handle, uint8_t chipId, uint8_t *found_nonce, 
 	Btc08ReadHash(handle, chipId, hash, hash_size);
 	for (int i=0; i<4; i++)
 	{
-		result = memcmp(default_golden_hash, &(hash[i*32]), 32);
+		result = memcmp(data->hash, &(hash[i*32]), 32);
 		if (result == 0)
 		{
 			sprintf(buf, "Inst_%s", (i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
@@ -832,7 +830,7 @@ static void TestInfiniteWorkLoop()
 				chipId     = res[3];
 
 				if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
-					handleGN3(handle, chipId, (uint8_t *)found_nonce, &micro_job_id);
+					if (handleGN3(handle, chipId, (uint8_t *)found_nonce, &micro_job_id, &data))
 					{
 						for (int i=0; i<4; i++)
 						{
