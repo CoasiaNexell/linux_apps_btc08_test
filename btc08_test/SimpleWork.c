@@ -111,7 +111,7 @@ static void SetPll(BTC08_HANDLE handle, int chipId, int pll_idx)
 	Btc08SetPllFoutEn(handle, chipId, FOUT_EN_ENABLE);
 
 	// seq6. Check PLL lock
-	lock_status = Btc08ReadPll(handle, res, res_size);
+	lock_status = Btc08ReadPll(handle, chipId, res, res_size);
 	NxDbgMsg(NX_DBG_ERR, "%5s [chip#%d] pll lock status: %s\n", "", chipId, (lock_status == 1) ? "locked":"unlocked");
 }
 

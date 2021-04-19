@@ -415,12 +415,12 @@ int Btc08SetPllConfig(BTC08_HANDLE handle, uint8_t idx)
 }
 
 
-int Btc08ReadPll(BTC08_HANDLE handle, uint8_t* res, uint8_t res_size)
+int Btc08ReadPll(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size)
 {
 	uint8_t *rx;
 	size_t txLen = 2;
 	handle->txBuf[0] = SPI_CMD_READ_PLL;
-	handle->txBuf[1] = 0x00;
+	handle->txBuf[1] = chipId;
 
 	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, 4+DUMMY_BYTES ) )
