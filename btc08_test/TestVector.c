@@ -945,6 +945,10 @@ void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
 	data->target[4] = select0;
 	data->target[5] = select1<<4 | (shift&0xF);
 
+	offset = 64 + 12;
+	//	Fill Hash
+	memcpy( data->hash, gstGoldenData[idx].hash, sizeof(gstGoldenData[idx].hash) );
+
 	//	make full range nonce
 	data->startNonce[0] = 0x00;
 	data->startNonce[1] = 0x00;
