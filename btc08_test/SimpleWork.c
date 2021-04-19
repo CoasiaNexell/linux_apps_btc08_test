@@ -9,8 +9,6 @@
 #include "Utils.h"
 #include "Btc08.h"
 
-#include "TestVector.h"
-
 #ifdef NX_DTAG
 #undef NX_DTAG
 #endif

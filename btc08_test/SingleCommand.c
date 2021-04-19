@@ -23,7 +23,7 @@ static void singlecommand_command_list()
 	printf("  3. Reset and TestBist\n");
 	printf("  4. Set the chip to the last chip\n");
 	printf("    ex > 4 [chipId(1~3)]\n");
-	printf("  5. Disable chip\n");
+	printf("  5. Disable core\n");
 	printf("    ex > 5 [chipId(1~3)] [core index(0~255)]\n");
 	printf("  6. Write, Read Target\n");
 	printf("  7. Set, Read disable\n");
@@ -43,7 +43,6 @@ static int HWReset( BTC08_HANDLE handle )
 	NxDbgMsg( NX_DBG_INFO, "Hardware Reset Done.\n" );
 	return 0;
 }
-
 
 static int ResetAutoAddress( BTC08_HANDLE handle )
 {
@@ -296,20 +295,22 @@ static int TestWRTarget( BTC08_HANDLE handle )
 		if (0 == Btc08WriteTarget(handle, chipId, default_golden_target))
 		{
 			Btc08ReadTarget(handle, chipId, res, 6);
-			if (0 == memcmp(default_golden_target, res, 6))
-				NxDbgMsg( NX_DBG_INFO, "=== %5s READ_TARGET(chip#%d) OK ==\n", "", chipId);
-			else
+			if (0 != memcmp(default_golden_target, res, 6))
 			{
-				NxDbgMsg( NX_DBG_INFO, "=== %5s READ_TARGET(chip#%d) NOT OK ==\n", "", chipId);
+				NxDbgMsg( NX_DBG_INFO, "=== %5s Failed READ_TARGET(chip#%d) ==\n", "", chipId);
 				if (debug) {
 					HexDump("write_target:", default_golden_target, 6);
 					sprintf(title, "chipId(%d) read_target:", chipId);
 					HexDump(title, res, 6);
+					return -1;
 				}
 			}
 		}
 		else
-			NxDbgMsg( NX_DBG_INFO, "=== %5s WRITE_TARGET(per Chip) NOT OK ==\n", "");
+		{
+			NxDbgMsg( NX_DBG_INFO, "=== %5s Failed WRITE_TARGET(per Chip) due to spi err ==\n", "");
+			return -1;
+		}
 	}
 
 	NxDbgMsg( NX_DBG_INFO, "=== WRITE_TARGET(BR) ==\n");
@@ -318,21 +319,23 @@ static int TestWRTarget( BTC08_HANDLE handle )
 		for (int chipId=1; chipId <= numChips; chipId++)
 		{
 			Btc08ReadTarget(handle, chipId, res, 6);
-			if (0 == memcmp(default_golden_target, res, 6))
-				NxDbgMsg( NX_DBG_INFO, "=== %5s READ_TARGET(chip#%d) OK ==\n", "", chipId);
-			else
+			if (0 != memcmp(default_golden_target, res, 6))
 			{
-				NxDbgMsg( NX_DBG_INFO, "=== %5s READ_TARGET(chip#%d) NOT OK ==\n", "", chipId);
-				if (debug) {
-					HexDump("write_target:", default_golden_target, 6);
-					sprintf(title, "chipId(%d) read_target:", chipId);
-					HexDump(title, res, 6);
-				}
+				NxDbgMsg( NX_DBG_INFO, "=== %5s Failed READ_TARGET(chip#%d) ==\n", "", chipId);
+				HexDump("write_target:", default_golden_target, 6);
+				sprintf(title, "chipId(%d) read_target:", chipId);
+				HexDump(title, res, 6);
+				return -1;
 			}
 		}
 	}
 	else
-		NxDbgMsg( NX_DBG_INFO, "=== WRITE_TARGET(BR) NOT OK ==\n");
+	{
+		NxDbgMsg( NX_DBG_INFO, "=== %5s Failed WRITE_TARGET(BR) due to spi err ==\n", "");
+		return -1;
+	}
+
+	NxDbgMsg(NX_DBG_INFO, "=== %5s Succeed READ/WRITE_TARGET ==\n", "");
 
 	return 0;
 }
@@ -343,7 +346,7 @@ static int TestWRDisable( BTC08_HANDLE handle )
 	int numChips;
 	char title[512];
 	uint8_t *ret;
-	uint8_t res[140] = {0x00,};
+	uint8_t res[32] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 
 	uint8_t enable_all[32] = {
@@ -411,21 +414,18 @@ static int TestWRDisable( BTC08_HANDLE handle )
 
 			// READ_DISABLE
 			Btc08ReadDisable(handle, chipId, res, 32);
-			if (0 == memcmp(test_data3[chipId-1], res, 32))
+			if (0 != memcmp(test_data3[chipId-1], res, 32))
 			{
-				NxDbgMsg(NX_DBG_INFO, "=== %5s READ_DISABLE(chip#%d) OK ==\n", "", chipId);
-			}
-			else
-			{
-				NxDbgMsg(NX_DBG_INFO, "=== %5s READ_DISABLE(chip#%d) NOT OK ==\n", "", chipId);
+				NxDbgMsg(NX_DBG_INFO, "=== %5s Failed READ_DISABLE(chip#%d) ==\n", "", chipId);
 				HexDump("set_disable:", test_data3[chipId-1], 32);
 				sprintf(title, "chipId(%d) read_disable:", chipId);
 				HexDump(title, res, 32);
+				return -1;
 			}
 		}
 		else {
-			NxDbgMsg( NX_DBG_INFO, "=== %5s SET_DISABLE(per Chip) NOT OK ==\n", "");
-			return 0;
+			NxDbgMsg( NX_DBG_INFO, "=== %5s Failed SET_DISABLE(per Chip) due to spi err ==\n", "");
+			return -1;
 		}
 	}
 
@@ -455,23 +455,22 @@ static int TestWRDisable( BTC08_HANDLE handle )
 
 			// READ_DISABLE
 			Btc08ReadDisable(handle, chipId, res, 32);
-			if (0 == memcmp(enable_all, res, 32))
+			if (0 != memcmp(enable_all, res, 32))
 			{
-				NxDbgMsg(NX_DBG_INFO, "=== %5s READ_DISABLE(chip#%d) OK ==\n", "", chipId);
-			}
-			else
-			{
-				NxDbgMsg(NX_DBG_INFO, "=== %5s READ_DISABLE(chip#%d) NOT OK ==\n", "", chipId);
+				NxDbgMsg(NX_DBG_INFO, "=== Failed READ_DISABLE(chip#%d) ==\n", chipId);
 				HexDump("set_disable:", enable_all, 32);
 				sprintf(title, "chipId(%d) read_disable:", chipId);
 				HexDump(title, res, 32);
+				return -1;
 			}
 		}
 	}
 	else {
-		NxDbgMsg( NX_DBG_INFO, "=== %5s SET_DISABLE(BR) NOT OK ==\n", "");
-		return 0;
+		NxDbgMsg( NX_DBG_INFO, "=== Failed SET_DISABLE(BR) due to spi err ==\n");
+		return -1;
 	}
+
+	NxDbgMsg(NX_DBG_INFO, "=== Succeed SET/READ_DISABLE ==\n");
 
 	return 0;
 }
@@ -481,8 +480,7 @@ static int TestReadRevision( BTC08_HANDLE handle )
 	int numChips;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-	uint32_t fixed_rev = {0x00080120};		// 20/01/08/00
-	uint32_t *rev;
+	uint8_t fixed_rev[4] = {0x20, 0x01, 0x08, 0x00};
 
 	Btc08ResetHW( handle, 1 );
 	Btc08ResetHW( handle, 0 );
@@ -493,20 +491,24 @@ static int TestReadRevision( BTC08_HANDLE handle )
 	{
 		if (0 == Btc08ReadRevision(handle, chipId, res, res_size))
 		{
-			NxDbgMsg(NX_DBG_INFO, "=== %5s Succeed to read revision(year:%02x, month:%02x, day:%02x, index:%02x) ==\n",
-						"", res[0], res[1], res[2], res[3]);
+			NxDbgMsg(NX_DBG_INFO, "=== Succeed to read revision(year:%02x, month:%02x, day:%02x, index:%02x) ==\n",
+						res[0], res[1], res[2], res[3]);
 
-#ifdef DEBUG
-			rev = (uint32_t *)res;
-			if (0 == memcmp(&fixed_rev, rev, 4))
-				NxDbgMsg(NX_DBG_INFO, "=== %5s Matched revision ==\n", "");
-			else
-				NxDbgMsg(NX_DBG_INFO, "=== %5s Not matched revision (0x%08x/0x%08x) ==\n", "", fixed_rev, *rev);
-#endif
+			if (0 != memcmp(fixed_rev, res, 4))
+			{
+				NxDbgMsg(NX_DBG_INFO, "=== Not matched revision ==\n");
+				HexDump("READ_REVISION", res, 4);
+				HexDump("fixed_rev", fixed_rev, 4);
+				return -1;
+			}
 		}
 		else
-			NxDbgMsg(NX_DBG_INFO, "=== %5s Fail to read revision ==\n", "");
+		{
+			NxDbgMsg(NX_DBG_INFO, "=== Failed READ_REVISION ==\n");
+			return -1;
+		}
 	}
+	NxDbgMsg(NX_DBG_INFO, "=== Succeed READ_REVISION ==\n");
 
 	return 0;
 }
@@ -516,8 +518,8 @@ static int TestReadFeature( BTC08_HANDLE handle )
 	int numChips;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-	uint32_t fixed_feature = {0x8600B0B5};		// Fixed value: 0xB5B, FPGA/ASIC: 0x00/0x05, 0x00, Hash Depth: 0x86
-	uint32_t *rev;
+	// Fixed value: 0xB5B, FPGA/ASIC: 0x00/0x05, 0x00, Hash Depth: 0x88
+	uint8_t fixed_feature[4] = {0xB5, 0xB0, 0x00, 0x88};
 
 	Btc08ResetHW( handle, 1 );
 	Btc08ResetHW( handle, 0 );
@@ -528,18 +530,24 @@ static int TestReadFeature( BTC08_HANDLE handle )
 	{
 		if (0 == Btc08ReadFeature(handle, chipId, res, res_size))
 		{
-			NxDbgMsg(NX_DBG_INFO, "=== %5s read feature(0x%02x 0x%02x 0x%02x 0x%02x) ==\n",
-						"", res[0], res[1], res[2], res[3]);
+			NxDbgMsg(NX_DBG_INFO, "=== read feature(0x%02x 0x%02x 0x%02x 0x%02x) ==\n",
+						res[0], res[1], res[2], res[3]);
 
-			rev = (uint32_t *)res;
-			if (0 == memcmp(&fixed_feature, rev, 4))
-				NxDbgMsg(NX_DBG_INFO, "=== %5s Matched feature ==\n", "");
-			else
-				NxDbgMsg(NX_DBG_INFO, "=== %5s Not matched feature (0x%08x/0x%08x) ==\n", "", fixed_feature, *rev);
+			if (0 != memcmp(fixed_feature, res, 4))
+			{
+				NxDbgMsg(NX_DBG_INFO, "=== %5s Not matched feature ==\n", "");
+				HexDump("READ_FEATURE", res, 4);
+				HexDump("fixed_feature", fixed_feature, 4);
+				return -1;
+			}
 		}
 		else
-			NxDbgMsg(NX_DBG_INFO, "=== %5s Fail to read revision ==\n", "");
+		{
+			NxDbgMsg(NX_DBG_INFO, "=== %5s Failed READ_FEATURE due to spi err ==\n", "");
+			return -1;
+		}
 	}
+	NxDbgMsg(NX_DBG_INFO, "=== %5s Succeed READ_FEATURE ==\n", "");
 
 	return 0;
 }
@@ -663,7 +671,7 @@ void SingleCommandLoop(void)
 			TestLastChip( handle, chipId );
 		}
 		//----------------------------------------------------------------------
-		//	Disable chip
+		//	Disable core
 		else if (!strcasecmp(cmd[0], "5") )
 		{
 			uint8_t chip_id = 1;
