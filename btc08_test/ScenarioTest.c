@@ -11,6 +11,7 @@
 
 #include "TestVector.h"
 #include "TempCtrl.h"
+#include "PllCtrl.h"
 
 #ifdef NX_DTAG
 #undef NX_DTAG
@@ -18,6 +19,8 @@
 #define NX_DTAG "[ScenarioTest]"
 #include "NX_DbgMsg.h"
 
+static FILE *bist_log = NULL;
+static char bist_logpath[512] = "";
 static int gst_IsService = 0;
 static pthread_mutex_t gst_hCtrlLock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -27,6 +30,7 @@ static void simplework_command_list()
 	printf("========== Scenario =========\n");
 	printf("  1. Start Service\n");
 	printf("  2. Stop Service\n");
+	printf("  3. Bist with the pll freq(300~1000MHz)\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -106,62 +110,128 @@ typedef struct SEVICE_INFO {
 } SERVICE_INFO;
 
 
-/*
- *
- * 						Work Loop
- * 
+/* Report Bist Result
+ * 1. pll frequency
+ * 2. temperature
+ * 3. the number of chips
+ * 4. the number of cores passed BIST
  */
+static void reportBistResult(const int freq, const float temp, BTC08_HANDLE handle)
+{
+	char result[1024];
+	int len;
+	size_t ret;
 
-//
-//	Initialize Work Loop : (Reset + Auto Address + Bist)
-//	 a. Reset H/W : H/W Reset
-//	 b. Auto Address : find out number of chips.
-//	 c. Bist : find out number of cores individual chip.
-//
+	snprintf(result, sizeof(result),
+				"\nfrequency  : %d MHz\ntemperature: %.02f C\ntotal_chips: %d\n",
+				freq, temp, handle->numChips);
+	len = strlen(result);
 
-static void RunBist( BTC08_HANDLE handle)
+	for (int i=1; i<=handle->numChips; i++) {
+		snprintf(result + len, sizeof(result), "chip#%d cores: %d\n", i, handle->numCores[i-1]);
+		len = strlen(result);
+	}
+
+	NxDbgMsg(NX_DBG_INFO, "[result]\n%s\n", result);
+
+	ret = fwrite(result, strlen(result), 1, bist_log);
+	fflush(bist_log);
+
+	if (ret != 1)
+		NxDbgMsg(NX_DBG_ERR, "BistResult fwrite error");
+}
+
+static void reportExitReason(const char *reason, FILE *logfile)
+{
+	size_t ret;
+	NxDbgMsg(NX_DBG_INFO, "[exit reason] %s\n", reason);
+
+	ret = fwrite(reason, strlen(reason), 1, logfile);
+	fflush(logfile);
+
+	if (ret != 1)
+		NxDbgMsg(NX_DBG_ERR, "ExitReason fwrite error");
+}
+
+static void RunBist( BTC08_HANDLE handle )
 {
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 
-	NxDbgMsg( NX_DBG_INFO, "=== RUN BIST ==\n");
+	NxDbgMsg(NX_DBG_INFO, "=== RUN BIST ==\n");
 
 	Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
 
 	// Set the golden nonce instead of the nonce range
 	Btc08WriteNonce (handle, BCAST_CHIP_ID, golden_nonce, golden_nonce);
-	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
 	Btc08RunBist    (handle, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
 
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		// If it's not BUSY status, read the number of cores in next READ_BIST
-		for (int i=0; i<10; i++) {
+		for (int i=0; i<10; i++)
+		{
 			ret = Btc08ReadBist(handle, chipId);
 			if ( (ret[0] & 1) == 0 )
 				break;
 			else
-				NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
-						chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
+				NxDbgMsg(NX_DBG_DEBUG, "%5s [chip#%d] status: %s, total cores: %d\n",
+						"", chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1]);
 
 			usleep( 300 );
 		}
+
 		ret = Btc08ReadBist(handle, chipId);
 		handle->numCores[chipId-1] = ret[1];
-		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Status = %s, Number of cores = %d\n", "",
-					chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
-	}
-	for (int chipId = 1; chipId <= handle->numChips; chipId++)
-	{
-		Btc08ReadId(handle, chipId, res, res_size);
-		NxDbgMsg( NX_DBG_INFO, "%5s ChipId = %d, Number of jobs = %d\n", "",
-					chipId, (res[2]&7) );
+		NxDbgMsg(NX_DBG_DEBUG, "%5s [chip#%d] status: %s, total cores: %d\n",
+					"", chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1]);
 	}
 }
 
+static void SetPllConfigByIdx(BTC08_HANDLE handle, int chipId, int pll_idx)
+{
+	// seq1. Disable FOUT
+	Btc08SetPllFoutEn(handle, chipId, FOUT_EN_DISABLE);
 
+	// seq2. Down reset
+	Btc08SetPllResetB(handle, chipId, RESETB_RESET);
+
+	// seq3. Set PLL(change PMS value)
+	Btc08SetPllConfig(handle, pll_idx);
+
+	// seq4. wait for 1 ms
+	usleep(1000);
+
+	// seq5. Enable FOUT
+	Btc08SetPllFoutEn(handle, chipId, FOUT_EN_ENABLE);
+}
+
+static int ReadPllLockStatus(BTC08_HANDLE handle, int chipId)
+{
+	int lock_status;
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+
+	lock_status = Btc08ReadPll(handle, chipId, res, res_size);
+	NxDbgMsg(NX_DBG_DEBUG, "%5s chip#%d is %s\n", "", chipId,
+			(lock_status == STATUS_LOCKED)?"locked":"unlocked");
+
+	return lock_status;
+}
+
+static void SetPllFreq(BTC08_HANDLE handle, int freq)
+{
+	int pll_idx = 0;
+
+	pll_idx = GetPllFreq2Idx(freq);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	{
+		SetPllConfigByIdx(handle, chipId, pll_idx);
+		ReadPllLockStatus(handle, chipId);
+	}
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -506,6 +576,93 @@ static void StopService( SERVICE_INFO *hService )
 	pthread_mutex_unlock( &gst_hCtrlLock );
 }
 
+static void ChipSortingBIST()
+{
+	uint8_t *ret;
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	int adcCh = 1;
+	int freq = 0;
+	float temperature;
+	int active_chips = 0;
+	char reason[1024] = {0,};
+
+	BTC08_HANDLE handle = CreateBtc08(0);
+
+	Btc08ResetHW(handle, 1);
+	Btc08ResetHW(handle, 0);
+
+	// seq1. read the number of chips
+	handle->numChips = Btc08AutoAddress(handle);
+	if (handle->numChips < 1 || handle->numChips > MAX_CHIP_NUM) {
+		snprintf(reason, sizeof(reason), "test failed due to spi err. wrong number of chips:%d\n", handle->numChips);
+		goto failure;
+	}
+
+	for (int chipId = 1; chipId <= handle->numChips; chipId++) {
+		Btc08ReadId(handle, chipId, res, res_size);
+		if (res[3] != chipId) {
+			memset(reason, 0, sizeof(char)*512);
+			snprintf(reason, sizeof(reason), "test failed due to spi err. wrong chipId:(%d != %d)\n", res[3], chipId);
+			goto failure;
+		}
+	}
+
+	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
+
+	for (int pll_idx = 0; pll_idx < NUM_PLL_SET; pll_idx++)
+	{
+		freq = GetPllIdx2Freq(pll_idx);
+
+		// seq2. set(change) pll to each chip
+		SetPllFreq(handle, freq);
+
+		// seq3. read the temperature
+		temperature = get_temp(get_mvolt(adcCh));
+		if (temperature > TEMPERATURE_THREASHOLD) {
+			memset(reason, 0, sizeof(char)*512);
+			snprintf(reason, sizeof(reason), "test stopped due to high temperature: %.3f\n", temperature);
+			goto failure;
+		}
+
+		// seq4. run BIST
+		RunBist(handle);
+
+		// seq6. report result (pll freq, temperature, number of cores)
+		reportBistResult(freq, temperature, handle);
+	}
+
+	// seq7. report with the reason and exit
+	reportExitReason("\ntest done\n", bist_log);
+	DestroyBtc08(handle);
+	return;
+
+failure:
+	reportExitReason(reason, bist_log);
+	DestroyBtc08(handle);
+	return;
+}
+
+static int init_log_file(int type)
+{
+	struct tm *timenow;
+
+	time_t now = time(NULL);
+	timenow = gmtime(&now);
+
+	if (type == 0)	// bist
+	{
+		strftime(bist_logpath, sizeof(bist_logpath),
+			"/home/root/bist_%Y-%m-%d_%H:%M:%S.log", timenow);
+		bist_log = fopen(bist_logpath, "w");
+		if(!bist_log) {
+			NxDbgMsg(NX_DBG_ERR, "failed to open %s", bist_logpath);
+			return -1;
+		}
+	}
+
+	return 0;
+}
 
 void ScenarioTestLoop(void)
 {
@@ -542,5 +699,16 @@ void ScenarioTestLoop(void)
 			}
 			break;
 		}
+		else if( !strcasecmp(cmd[0], "3") )
+		{
+			// prepare bist log file
+			init_log_file(0);
+			ChipSortingBIST();
+			fclose(bist_log);
+			break;
+		}
+	}
+	if (NULL != bist_log) {
+		fclose(bist_log);
 	}
 }

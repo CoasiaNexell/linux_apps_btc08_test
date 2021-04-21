@@ -8,6 +8,7 @@ bin_PROGRAMS = btc08_test
 btc08_test_SOURCES = \
 	engine/NX_DbgMsg.c \
 	engine/TempCtrl.c \
+	engine/PllCtrl.c \
 	engine/GpioControl.c \
 	engine/Spi.c \
 	engine/Btc08.c \
