@@ -20,16 +20,17 @@
 #include "NX_DbgMsg.h"
 
 static FILE *bist_log = NULL;
+static FILE *mining_log = NULL;
 static char bist_logpath[512] = "";
-static int gst_IsService = 0;
-static pthread_mutex_t gst_hCtrlLock = PTHREAD_MUTEX_INITIALIZER;
+static char mining_logpath[512] = "";
+static pthread_mutex_t hServiceLock = PTHREAD_MUTEX_INITIALIZER;
 
 static void simplework_command_list()
 {
 	printf("\n\n");
 	printf("========== Scenario =========\n");
-	printf("  1. Start Service\n");
-	printf("  2. Stop Service\n");
+	printf("  1. Start Mining\n");
+	printf("  2. Stop Mining\n");
 	printf("  3. Bist with the pll freq(300~1000MHz)\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
@@ -65,50 +66,54 @@ static void simplework_command_list()
 
 
 typedef struct SEVICE_INFO {
-
-	int bExitWorkLoop;
-	int bExitMonitorLoop;
+	int 			bExitWorkLoop;
+	int 			bExitMonitorLoop;
 
 	//	Work Related Param
-	uint64_t totalJobCnt;
-	uint8_t jobId;						//	0 ~ 255
+	uint8_t 		jobId;				//	0 ~ 255
 
 	//	 Temporature Alert
-	int bTempAlert;
-	float tempAlertValue;				//	reference temporature value for alert
-
-	pthread_mutex_t hMutex;
-	pthread_t		hWorkThread;		//	Work Thread Handler
-
-
+	int 			bTempAlert;
+	float 			tempAlertValue;		//	reference temporature value for alert
+	float 			currentTemp;
 
 	//	BTC08 Handle
-	BTC08_HANDLE hBtc08;
+	BTC08_HANDLE 	hBtc08;
 
-	//	Loop Control Parameters
-	int bExitJobLoop;
-	int bExitMinLoop;
-	int bExitMonLoop;
-	int bExitCmdLoop;
-
-	//	Queue
-	NX_QUEUE		cmdQueue;			//	Command Queue
-	NX_QUEUE		workQueue;			//	Work Queue
-
-	NX_SEMAPHORE	hCmdSem;			//	Semaphore for Command
-	NX_SEMAPHORE	hWorkSem;			//	Semaphore for work queue
-
-	//	Loop Handle
-	pthread_t		hJobThread;			//	Job Creation Loop
-	pthread_t		hMinThread;			//	Mining Loop
-	pthread_t		hMonThread;			//	Monitoring Loop
-	pthread_t		hCmdThread;			//	Command Loop
+	//	Monitoring/Mining Thread ID
+	pthread_t		hMonThread;
+	pthread_t		hWorkThread;
 
 	//	Nonce Distribution
 	uint8_t			startNonce[MAX_CHIPS][4];
 	uint8_t			endNonce[MAX_CHIPS][4];
+
+	// pll freq
+	int 			pll_freq;
 } SERVICE_INFO;
 
+/* Report Hash Result
+ * 1. pll frequency
+ * 2. temperature
+ * 3. hash rate
+ */
+static void reportHashResult(const int freq, const float temp, const double hashrate)
+{
+	char result[1024];
+	int ret;
+
+	snprintf(result, sizeof(result),
+				"\nfrequency  : %d MHz\ntemperature: %.02f C\nhashrate   : %.2f MHash/s\n",
+				freq, temp, hashrate);
+
+	NxDbgMsg(NX_DBG_INFO, "[result]\n%s\n", result);
+
+	ret = fwrite(result, strlen(result), 1, mining_log);
+	fflush(mining_log);
+
+	if (ret != 1)
+		NxDbgMsg(NX_DBG_ERR, "HashResult fwrite error");
+}
 
 /* Report Bist Result
  * 1. pll frequency
@@ -277,20 +282,23 @@ static void DistributionNonce( BTC08_HANDLE handle )
 	handle->endNonce[ii][3] = 0xff;
 }
 
-static void InitializeMiningkLoop( SERVICE_INFO *hService )
+/* Set pll frequency > BIST > Enable OON IRQ & Set UART DIVIDER > Nonce Distribution */
+static int InitializeMiningkLoop( SERVICE_INFO *hService )
 {
-	uint8_t *ret;
-	uint8_t res[4] = {0x00,};
-	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	BTC08_HANDLE handle;
+
 	hService->hBtc08 = CreateBtc08(0);
-	BTC08_HANDLE handle = hService->hBtc08;
+	if (hService->hBtc08 == NULL)
+		return -1;
+
+	handle = hService->hBtc08;
 
 	//	1. Reset
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);
 
 	// 2. Auto Address
-	Btc08AutoAddress(handle);
+	handle->numChips = Btc08AutoAddress(handle);
 
 	// 3. S/W Reset S/W
 	Btc08Reset(handle);
@@ -302,263 +310,330 @@ static void InitializeMiningkLoop( SERVICE_INFO *hService )
 	// 5. Enable all cores
 	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
 
-	// 6. Find number of cores of individual chips
-	RunBist( handle );
+	// 6. Set PLL freq
+	SetPllFreq(handle, hService->pll_freq);
 
-	// 7. Enable OON IRQ/Set UART divider
+	// 7. Find number of cores of individual chips
+	RunBist(handle);
+
+	// 8. Enable OON IRQ/Set UART divider
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
 
-	// 8. Nonce Distribution
-	DistributionNonce( handle );
+	// 9. Nonce Distribution
+	DistributionNonce(handle);
 
-	hService->totalJobCnt = 0;
 	hService->jobId = 1;
+
+	return 0;
 }
 
 static void DeinitializeWorkLoop( SERVICE_INFO *hService )
 {
-	//	Ternoff H/W
-	if( hService && hService->hBtc08 )
+	//	Stop work loop
+	if (hService)
 	{
-		//	Set Reset
-		Btc08ResetHW(hService->hBtc08, 1);
-		DestroyBtc08(hService->hBtc08);
+		hService->bExitWorkLoop = 1;
 	}
 }
 
-
-static void AddGoldenJob( SERVICE_INFO *hService )
+static void AddGoldenJob( SERVICE_INFO *hService, VECTOR_DATA *data )
 {
-	//	Write midstate and data(merkleroot, time, target) & target & start and end nonce
-	Btc08WriteParam(hService->hBtc08, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
-	Btc08WriteTarget(hService->hBtc08, BCAST_CHIP_ID, default_golden_target);
-	Btc08WriteNonce(hService->hBtc08, BCAST_CHIP_ID, golden_nonce_start, golden_nonce_end);
-	Btc08RunJob(hService->hBtc08, BCAST_CHIP_ID, ASIC_BOOST_EN, hService->jobId);
-	if( hService->jobId >= (MAX_JOB_ID-1) )
+	BTC08_HANDLE handle;
+	handle = hService->hBtc08;
+
+	// Get golden vector
+	GetGoldenVectorWithVMask(4, data, 0);
+
+	Btc08WriteParam(handle, BCAST_CHIP_ID, data->midState, data->parameter);
+	Btc08WriteTarget(handle, BCAST_CHIP_ID, data->target);
+	DistributionNonce(handle);
+	for(int i=0; i<handle->numChips ; i++)
+	{
+		NxDbgMsg( NX_DBG_INFO, "Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n",
+			i, handle->numCores[i], handle->startNonce[i][0], handle->startNonce[i][1],
+			handle->startNonce[i][2], handle->startNonce[i][3], handle->endNonce[i][0],
+			handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3]);
+		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
+	}
+
+	// Run job
+	Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, hService->jobId++);
+	if(hService->jobId >= (MAX_JOB_ID-1))
 		hService->jobId = 1;
-	else
-		hService->jobId ++;
-	hService->totalJobCnt ++;
 }
 
-static uint32_t calRealGN(uint8_t chipId, uint8_t *in, uint32_t valid_cnt, uint32_t numCores)
+static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *found_nonce, uint8_t *micro_job_id, VECTOR_DATA *data)
 {
-	uint32_t *gn = (uint32_t *)in;
-
-	*gn = bswap_32(*gn);
-
-	NxDbgMsg(NX_DBG_DEBUG, "in[0x%08x] swap[0x%08x] cal[0x%08x] \n",
-			in, gn, (*gn - valid_cnt * numCores));
-
-	return (*gn - valid_cnt * numCores);
-}
-
-static int handleGN(SERVICE_INFO *hService, uint8_t chipId)
-{
-	int ret = 0;
+	int ret = 0, result = 0;
 	uint8_t hash[128] = {0x00,};
 	unsigned int hash_size = sizeof(hash)/sizeof(hash[0]);
-	uint8_t gn[18] = {0x00,};
-	unsigned int gn_size = sizeof(gn)/sizeof(gn[0]);
-	uint8_t lower3, lower2, lower, upper, validCnt;
-	int match;
-
-	// Read Hash
-	Btc08ReadHash(hService->hBtc08, chipId, hash, hash_size);
-
-	// Read Result to read GN and clear GN IRQ
-	Btc08ReadResult(hService->hBtc08, chipId, gn, gn_size);
-	validCnt = gn[1];
-
-	for (int i=0; i<16; i+=4)
-	{
-		uint32_t cal_gn = calRealGN(chipId, &(gn[2+i]), validCnt, hService->hBtc08->numCores[chipId]);
-		if (cal_gn == 0x66cb3426)
-		{
-			NxDbgMsg(NX_DBG_INFO, "Inst_%s found golden nonce 0x%08x \n",
-					(i==0) ? "Lower_3":(((i==4) ? "Lower_2": ((i==8) ? "Lower":"Upper"))),
-					cal_gn);
-			ret = 1;
-		}
-	}
-	return ret;
-}
-
-static int handleOON(SERVICE_INFO *hService)
-{
-	int ret = 0;
-	uint8_t res[4] = {0x00,};
+	uint8_t zero_hash[128] = {0x00,};
+	uint8_t res[18] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	char buf[512];
 
-	// Read ID to get FIFO status for chipId#1
-	// The FIFO status of all chips are same.
-	if (0 == Btc08ReadId (hService->hBtc08, 1, res, res_size))
+	memset(zero_hash, 0, sizeof(zero_hash));
+
+	// Sequence 1. Read Hash
+	ret = Btc08ReadHash(handle, chipId, hash, hash_size);
+	if (ret == 0) {
+		for (int i=0; i<4; i++)
+		{
+			result = memcmp(zero_hash, &(hash[i*32]), 32);
+			if (result != 0)
+			{
+				sprintf(buf, "Hash of Inst_%s",
+						(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
+				HexDump(buf, &(hash[i*32]), 32);
+			}
+		}
+	} else
+		return -1;
+
+	// Sequence 2. Read Result to read GN and clear GN IRQ
+	ret = Btc08ReadResult(handle, chipId, res, res_size);
+	if (ret == 0)
 	{
-		int numJobs, numLeftFifo;
-
-		numJobs = (res[2] & 0x07);		// res[2]: [10:8] Number of jobs in FIFO
-		numLeftFifo = MAX_JOB_FIFO_NUM - numJobs;
-
-		// If FIFO is not full, clear OON IRQ and then Run job for a work
-		if (0 == numLeftFifo)
+		*micro_job_id = res[17];
+		for (int i=0; i<4; i++)
 		{
-			NxDbgMsg(NX_DBG_INFO, "FIFO is full!\n");
-			ret = -1;
+			memcpy(&(found_nonce[i*4]), &(res[i*4]), 4);
+			if((*micro_job_id & (1<<i)) != 0) {
+				sprintf(buf, "Nonce of Inst_%s",
+						(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
+				HexDump(buf, &(res[i*4]), 4);
+			}
 		}
-		else
-		{
-			Btc08ClearOON(hService->hBtc08, BCAST_CHIP_ID);
-			ret = 0;
-		}
-	}
+	} else
+		return -1;
 
 	return ret;
 }
 
+/* Work Loop
+ * Initialize Work Loop : (Reset + Auto Address + Bist)
+ *	 a. Reset H/W : H/W Reset
+ *	 b. Auto Address : find out number of chips.
+ *	 c. Bist : find out number of cores individual chip.
+ */
 static void *WorkLoop( void *arg )
 {
 	SERVICE_INFO *hService = (SERVICE_INFO*)arg;
 	BTC08_HANDLE handle;
-	uint32_t jobCnt = 0;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = 4;
+	uint8_t gn_irq = 0x0, gn_job_id = 0x0, chipId = 0x0;
+	uint64_t startTime, currTime, deltaTime, prevTime;
+	uint64_t totalProcessedHash = 0;
+	double totalTime;
+	double megaHash;
+	uint8_t micro_job_id;
+	uint32_t found_nonce[4];
+	uint8_t job_id;
+	VECTOR_DATA data;
+	char reason[1024] = {0,};
 
-	InitializeMiningkLoop( hService );
+	int status = InitializeMiningkLoop( hService );
+	if (status < 0) {
+		snprintf(reason, sizeof(reason), "test failed due to btc08 handle creation failure\n");
+		goto failure;
+	}
 
 	handle = hService->hBtc08;
+	if (handle->numChips < 1 || handle->numChips > MAX_CHIP_NUM) {
+		snprintf(reason, sizeof(reason), "test failed due to spi err. wrong number of chips:%d\n", handle->numChips);
+		goto failure;
+	}
 
-	AddGoldenJob(hService);
+	for (int chipId = 1; chipId <= handle->numChips; chipId++) {
+		Btc08ReadId(handle, chipId, res, res_size);
+		if (res[3] != chipId) {
+			memset(reason, 0, sizeof(char)*512);
+			snprintf(reason, sizeof(reason), "test failed due to spi err. wrong chipId:(%d != %d)\n", res[3], chipId);
+			goto failure;
+		}
+	}
 
-	// Run jobs with asicboost
+	for (int i = 0; i < MAX_JOB_FIFO_NUM; i++) {
+		AddGoldenJob(hService, &data);
+	}
+
+	startTime = get_current_ms();
+	prevTime = startTime;
+
 	while( !hService->bExitWorkLoop )
 	{
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_GN))	// Check GN GPIO pin
 		{
-			uint8_t gn_irq = 0x00, chipId;
-			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
-			gn_irq 	  = res[2] & (1<<0);
-			chipId    = res[3];
+			for (int i=1; i<=handle->numChips; i++)
+			{
+				Btc08ReadJobId(handle, i, res, res_size);
+				gn_job_id  = res[1];
+				gn_irq 	   = res[2] & (1<<0);
+				chipId     = res[3];
 
-			// If GN IRQ is not set, then go to check OON
-			if (1 != gn_irq)
-			{
-				NxDbgMsg(NX_DBG_ERR, "H/W GN interrupt occured but GN_IRQ is not set!\n");
-			}
-			// If GN IRQ is set, then handle GN
-			else
-			{
-				// Check if found GN(0x66cb3426) is correct and submit nonce to pool server and then go loop again
-				handleGN(hService, chipId);
-				continue;
+				NxDbgMsg(NX_DBG_INFO, " <== OON jobId(%d) GN jobid(%d) ChipId(%d) %s %s %s\n",
+							res[0], res[1], res[3],
+							(0 != (res[2] & (1<<2))) ? "FIFO is full":"",
+							(0 != (res[2] & (1<<1))) ? "OON IRQ":"",
+							(0 != gn_irq) ? "GN IRQ":"");
+
+				if (0 != gn_irq)		// If GN IRQ is set, then handle GN
+				{
+					if (0 == handleGN(handle, chipId, (uint8_t *)found_nonce, &micro_job_id, &data))
+					{
+						for (int i=0; i<4; i++)
+						{
+							found_nonce[i] = bswap_32(found_nonce[i]);
+							if((micro_job_id & (1<<i)) != 0)
+							{
+								memcpy(&data, &(vmask_001[(1<<i)]), 4);
+								if (!submit_nonce(&data, found_nonce[i])) {
+									NxDbgMsg(NX_DBG_ERR, "%5s Failed: invalid nonce 0x%08x\n", "", found_nonce[i]);
+									hService->bExitWorkLoop = 1;
+									break;
+								} else {
+									NxDbgMsg(NX_DBG_INFO, "%5s Succeed: valid nonce 0x%08x\n", "", found_nonce[i]);
+								}
+							}
+						}
+					}
+				} else {			// If GN IRQ is not set, then go to check OON
+					NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!!!\n", "");
+				}
 			}
 		}
 
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
 		{
-			uint8_t oon_irq, fifo_full;
-			// TODO: Need to check if it needs to read job id
-			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
-			fifo_full = res[2] & (1<<2);
-			oon_irq	  = res[2] & (1<<1);
+			NxDbgMsg(NX_DBG_INFO, "=== OON IRQ!!! ===\n");
+			Btc08ClearOON(handle, BCAST_CHIP_ID);
 
-			if (1 != oon_irq) {				// OON IRQ is not set (cgminer: check OON timeout is expired)
-				NxDbgMsg(NX_DBG_WARN, "H/W OON interrupt occured but OON IRQ is not set!\n");
-				// if oon timeout is expired, disable chips
-				// if oon timeout is not expired, check oon gpio again
-			} else {						// If OON IRQ is set, handle OON
-				handleOON(hService);
-				AddGoldenJob(hService);
+			totalProcessedHash += 0x800000000;	//	0x100000000 * 2(works) * 4(asic booster)
+
+			currTime = get_current_ms();
+			totalTime = currTime - startTime;
+
+			megaHash = totalProcessedHash / (1000*1000);
+			NxDbgMsg(NX_DBG_INFO, "AVG : %.2f MHash/s, Hash = %.2f GH, Time = %.2f sec, delta = %lld msec\n",
+					megaHash * 1000. / totalTime, megaHash/1000, totalTime/1000. , currTime - prevTime );
+
+			reportHashResult(hService->pll_freq, hService->currentTemp, (megaHash*1000./totalTime));
+
+			prevTime = currTime;
+
+			// Add new 2 works
+			for (int i=0; i<2; i++) {
+				AddGoldenJob(hService, &data);
 			}
 		}
 		sched_yield();
 	}
 
+	if (hService && hService->hBtc08) {
+		Btc08ResetHW(hService->hBtc08, 1);
+	}
+
 	return (void*)0xDeadFace;
+
+failure:
+	if (hService)
+		hService->bExitWorkLoop = 1;
+
+	reportExitReason(reason, mining_log);
+
+	if (hService && hService->hBtc08)
+		DestroyBtc08(hService->hBtc08);
+
+	return NULL;
 }
 
-
-/*
- *
- * 						Monitor Loop
- * 
- */
+/* Monitor Loop */
 void *MonitorLoop( void *arg )
 {
 	int adcCh = 1;
-	float temperature;
+	float mv;
+	char reason[1024];
 	SERVICE_INFO *hService = (SERVICE_INFO*)arg;
+
+	if (NULL == hService)
+		return (void*)0xDeadFace;
 
 	while( !hService->bExitMonitorLoop )
 	{
-		temperature = get_temp(get_mvolt(adcCh));
-		if( temperature > hService->tempAlertValue )
+		mv = get_mvolt(adcCh);
+		hService->currentTemp = get_temp(mv);
+		NxDbgMsg(NX_DBG_INFO, "voltage: %.2f, temperature: %.3f C\n", mv, hService->currentTemp);
+		if( hService->currentTemp > hService->tempAlertValue )
 		{
-			NxDbgMsg( NX_DBG_INFO, "Temper Alert : %.3f > %.3f\n", temperature, hService->tempAlertValue );
+			DeinitializeWorkLoop(hService);
+			snprintf(reason, sizeof(reason), "test stopped due to high temperature: %.3f > %.2f C\n",
+						hService->currentTemp, hService->tempAlertValue);
+			reportExitReason(reason, mining_log);
+			break;
 		}
-		usleep(500);
+		usleep(1000 * 1000);
 	}
+
 	return (void*)0xDeadFace;
 }
 
-
-static SERVICE_INFO *StartService( void )
+static SERVICE_INFO *StartService( float max_temp, int freq )
 {
 	SERVICE_INFO *hService;
 
-	if( gst_IsService )
-		return NULL;
-
 	hService = (SERVICE_INFO *)malloc(sizeof(SERVICE_INFO));
-
 	if( !hService )
 		return NULL;
 
-	pthread_mutex_lock( &gst_hCtrlLock );
+	pthread_mutex_lock( &hServiceLock );
 
 	memset( hService, 0, sizeof(SERVICE_INFO) );
-	hService->bExitWorkLoop = 1;
-	hService->bExitMonitorLoop = 1;
+
+	hService->pll_freq = freq;
+	hService->tempAlertValue = max_temp;
+	hService->bExitWorkLoop = 0;
+	hService->bExitMonitorLoop = 0;
 
 	//	Monitor Loop
-	hService->bExitMonitorLoop = 0;
-	if( pthread_create( &hService->hWorkThread, NULL, MonitorLoop, hService ) )
+	if( pthread_create( &hService->hMonThread, NULL, MonitorLoop, hService ) )
 	{
-		hService->bExitMonitorLoop = 0;
+		hService->bExitMonitorLoop = 1;
+		NxDbgMsg(NX_DBG_ERR, "failed to create MonitorLoop thread\n");
 		goto ERROR_EXIT;
 	}
 
 	//	Work Loop
-	hService->bExitWorkLoop = 0;
-	if( pthread_create( &hService->hMonThread, NULL, WorkLoop, hService ) )
+	if( pthread_create( &hService->hWorkThread, NULL, WorkLoop, hService ) )
 	{
 		hService->bExitWorkLoop = 1;
+		NxDbgMsg(NX_DBG_ERR, "failed to create WorkLoop thread\n");
 		goto ERROR_EXIT;
 	}
 
-	pthread_mutex_unlock( &gst_hCtrlLock );
+	pthread_mutex_unlock( &hServiceLock );
 	return hService;
 
 ERROR_EXIT:
 	if( !hService->bExitWorkLoop )
 	{
 		hService->bExitWorkLoop = 1;
-		pthread_join( hService->hWorkThread, NULL );
 	}
 
 	if( !hService->bExitMonitorLoop )
 	{
 		hService->bExitMonitorLoop = 1;
-		pthread_join( hService->hMonThread, NULL );
 	}
 
 	free( hService );
-	pthread_mutex_unlock( &gst_hCtrlLock );
-	return NULL;
+	pthread_mutex_unlock( &hServiceLock );
+	return hService;
 }
 
 static void StopService( SERVICE_INFO *hService )
 {
-	pthread_mutex_lock( &gst_hCtrlLock );
+	pthread_mutex_lock( &hServiceLock );
+
 	if( hService )
 	{
 		if( !hService->bExitWorkLoop )
@@ -572,8 +647,9 @@ static void StopService( SERVICE_INFO *hService )
 			pthread_join( hService->hMonThread, NULL );
 		}
 		free( hService );
+		NxDbgMsg(NX_DBG_INFO, "hService is freed");
 	}
-	pthread_mutex_unlock( &gst_hCtrlLock );
+	pthread_mutex_unlock( &hServiceLock );
 }
 
 static void ChipSortingBIST()
@@ -660,6 +736,16 @@ static int init_log_file(int type)
 			return -1;
 		}
 	}
+	else			// mining
+	{
+		strftime(mining_logpath, sizeof(mining_logpath),
+			"/home/root/mining_%Y-%m-%d_%H:%M:%S.log", timenow);
+		mining_log = fopen(mining_logpath, "w");
+		if(!mining_log) {
+			NxDbgMsg(NX_DBG_ERR, "failed to open %s", mining_logpath);
+			return -1;
+		}
+	}
 
 	return 0;
 }
@@ -684,11 +770,27 @@ void ScenarioTestLoop(void)
 		}
 		else if( !strcasecmp(cmd[0], "1") )
 		{
+			// prepare mining log file
+			init_log_file(1);
 			if( NULL == hService )
 			{
-				hService = StartService();
+				float max_temp = 100.0;
+				int   pll_freq = 300;
+				if( cmdCnt > 1 ) {
+					max_temp = strtol(cmd[1], 0, 10);
+					if (max_temp > 100.00) {
+						max_temp = 100.00;
+					}
+				}
+				if (cmdCnt > 2) {
+					pll_freq = strtol(cmd[2], 0, 10);
+					if (pll_freq > 1000) {
+						pll_freq = 1000;
+					}
+				}
+				printf("max_temp = %.3f pll_freq = %d\n", max_temp, pll_freq);
+				hService = StartService(max_temp, pll_freq);
 			}
-			break;
 		}
 		else if( !strcasecmp(cmd[0], "2") )
 		{
@@ -707,6 +809,10 @@ void ScenarioTestLoop(void)
 			fclose(bist_log);
 			break;
 		}
+	}
+
+	if (NULL != mining_log) {
+		fclose(mining_log);
 	}
 	if (NULL != bist_log) {
 		fclose(bist_log);
