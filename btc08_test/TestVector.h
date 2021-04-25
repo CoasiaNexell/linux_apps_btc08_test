@@ -10,6 +10,8 @@ typedef struct VECTOR_DATA {
 	unsigned char data[128];
 	uint8_t midState[32*4];
 	uint8_t parameter[12];
+	uint8_t nbits[4];
+	uint8_t current_target[32];
 	uint8_t target[6];
 	uint8_t startNonce[4];
 	uint8_t endNonce[4];
@@ -34,6 +36,8 @@ uint8_t golden_enable[32];
 void GetBistVector( VECTOR_DATA *data );
 void GetGoldenVector( int idx, VECTOR_DATA *data, int enMidRandom );
 void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom );
+void swab256(void *dest_p, const void *src_p);
+void target_from_nbits(uint8_t *nbits, uint8_t *current_target);
 
 extern uint32_t vmask_001[16];
 bool submit_nonce(VECTOR_DATA *data, uint32_t nonce);

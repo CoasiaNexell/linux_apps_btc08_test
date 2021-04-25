@@ -121,20 +121,19 @@ uint32_t vmask_001[16];
 //		Nonce, Hash
 //
 
-static BLOCk_DATA_INFO gstGoldenData[7] = {
+static BLOCk_DATA_INFO gstGoldenData[8] = {
 	// Index 0
 	{
 		//	#671783 Block Header
-		//	Hash 0000000000000000000ac4a7ac61e102ab2035b62f60d18a732f79caab8d3357
-		//
-		//	Version       : 20000000
+		//	Hash          : 0000000000000000000ac4a7ac61e102ab2035b62f60d18a732f79caab8d3357
+		//	Version       : 100000000000000000000000000000 (bit) --> 20000000 (hex)
 		//	Merkle Root   : 222be02d6272f066d498c4f5374283e146f7ccb0a4148d0107a6bc2418174bec
 		//	Previous Hash : 000000000000000000056e900ac4220ce2287a082d0ba6b974cfdd3e498f76f2
-		//	TimeStamp     : 2021-02-23 04:12 (0x60348090) + alpha() : blockchair's mined on time 
-		//	Nonce         : 1353073737
-		//	Bits          : 386725091
+		//	TimeStamp     : 0x60348090(2021-02-23 AM 04:12) + alpha() : blockchair's mined on time
+		//                    --> 603480B7(2021-02-23 AM 4:12:39)
+		//	Nonce         : 1353073737(50A64449 hex), found from Upper
+		//	Bits          : 386725091 (170CF4E3 hex)
 		{
-			//-------------------------------------------
 			//	Version
 			0x20,0x00,0x00,0x00,
 			//	Previous Block Hash
@@ -159,7 +158,6 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 			0x60,0x34,0x80,0x90,	//	parameter[12]
 			//	Bits
 			0x17,0x0C,0xF4,0xE3,
-			//-------------------------------------------
 			//	Nonce
 			0x50,0xA6,0x44,0x49
 		},
@@ -178,17 +176,14 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 
 	// Index 1
 	{
-		//	#671894 Block
-		//
-		//	Hash : 00000000000000000007e6336da9efc6d9b98966eed15241cc0ff75f0ecc5638
-		//
-		//	Version : 20400000
+		//	#671894 Block Header
+		//	Hash          : 00000000000000000007e6336da9efc6d9b98966eed15241cc0ff75f0ecc5638
+		//	Version       : 20400000 (hex)
 		//	Previous Hash : 00000000000000000006bf973dc198707645fc75bb6141e2e2e28da3aacfeb47
-		//	Merckle Root : f9b139565dfda4eb59940d5ee080fdc68fd371d395350f508c024595064d44c4
-		//	Time : 2021-02-24 01:08, 6035A6F0
-		//	Bits : 386725091
-		//	Nonce : 639392792
-		//
+		//	Merckle Root  : f9b139565dfda4eb59940d5ee080fdc68fd371d395350f508c024595064d44c4
+		//	TimeStamp     : 6035A6F0(2021-02-24 01:08:00) --> 6035A714(2021-02-24 AM 01:08:36)
+		//	Bits          : 386725091 (170CF4E3 hex)
+		//	Nonce         : 639392792 (261C5C18 hex), found from Upper
 		{
 			//	Version
 			0x20,0x40,0x00,0x00,
@@ -214,7 +209,7 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 			0x60,0x35,0xA6,0xF0,
 			//	Bits (386725091)
 			0x17,0x0C,0xF4,0xE3,
-			//	Nonce (639392792)
+			//	Nonce
 			0x26,0x1C,0x5C,0x18,
 		},
 		{
@@ -232,14 +227,13 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 	// Index 2
 	{
 		//	#671895 Block
-		//	Hash : 0000000000000000000281aec9110b39a14b747ba95aa333e472c9da7dd0f97d
-		//
-		//	Version : 27ffe000
+		//	Hash          : 0000000000000000000281aec9110b39a14b747ba95aa333e472c9da7dd0f97d
+		//	Version       : 27ffe000 (hex)
 		//	Previous Hash : 00000000000000000007e6336da9efc6d9b98966eed15241cc0ff75f0ecc5638
-		//	Merkle Root : 3a81535e71294d1546c6329e2ae424d9308971323f998914aa7419ba93c32583
-		//	TimeStamp : 2021-02-24 01:29 , 6035ABDC
-		//	Bits : 386725091
-		//	Nonce : 3675314107
+		//	Merkle Root   : 3a81535e71294d1546c6329e2ae424d9308971323f998914aa7419ba93c32583
+		//	TimeStamp     : 6035ABDC(2021-02-24 AM 01:29:00) --> 6035AC08(2021-02-24 AM 1:29:44)
+		//	Bits          : 386725091 (170CF4E3 hex)
+		//	Nonce         : 3675314107(DB10D7BB hex) found from Upper and Lower
 		{
 			//	Version
 			0x27,0xff,0xe0,0x00,
@@ -284,15 +278,13 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 	// Index 3
 	{
 		//	#671896 Block
-		//
 		//	Hash          : 00000000000000000006565cbae6016f8d12e8d97756c8a40e6e09babbeb5906
-		//
-		//	Version       : 2000e000
+		//	Version       : 2000e000 (hex)
 		//	Previous Hash : 0000000000000000000281aec9110b39a14b747ba95aa333e472c9da7dd0f97d
 		//	Merkle Root   : 4949ad5a4c52006d85db1356f20b14b57c43012abe4b22cfcf830e5ceff62ce4
-		//	TimeStamp     : 2021-02-24 01:57
-		//	Bits          : 386725091
-		//	Nonce         : 289953179
+		//	TimeStamp     : 6035B26C(2021-02-24 AM 01:57:00) --> 6035B29B(2021-02-24 AM 01:57:47)
+		//	Bits          : 386725091 (170CF4E3 hex)
+		//	Nonce         : 289953179 (1148559B hex) found Upper and Lower
 		{
 			//	Version
 			0x20,0x00,0xe0,0x00,
@@ -314,16 +306,14 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 			0x85,0xdb,0x13,0x56,
 			0x4c,0x52,0x00,0x6d,
 			0x49,0x49,0xad,0x5a,
-
 			//	TimeStamp 6035B26C
 			0x60,0x35,0xB2,0x6C,
-			//	Bits (386725091)
+			//	Bits
 			0x17,0x0C,0xF4,0xE3,
-			//	Nonce (289953179)
+			//	Nonce
 			0x11,0x48,0x55,0x9B,
 		},
 		{
-			//	Hash
 			0x00,0x00,0x00,0x00,
 			0x00,0x00,0x00,0x00,
 			0x00,0x06,0x56,0x5c,
@@ -335,24 +325,18 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 		}
 	},
 
-	// Index 4 : Our Golden Data Hash ()
-
-	//
-	// Hash                       00000000000000000022093dd438ed47fa28e71858b8220d53e5cd83b8d0d442
-	//
-	// Version                    20000000
-	// Prev_Hash                  00000000000000000026087ab13d78b5062f38bceb8fe2dc14c53e6b25057933
-	// Merkle_Root                f42a1d6e97a8bc9f22e5516842b25ac4d53b2442b971b718a07e2c9d3085a5a5
-	// Time                       5B30707E (2018-06-25 04:33:00) // 5B30707C
-	// Bits                       17376F56
-	// Nonce                      66cb3426
-
-	//	Midstate                  5f4d60a25385c407c2a84e0c259169c410a4a54b93f71708f1abdfec6e8b81d2
-	//
-	//	#529122
+	// Index 4
 	{
+		// #529122 Block
+		// Hash          : 00000000000000000022093dd438ed47fa28e71858b8220d53e5cd83b8d0d442
+		// Version       : 20000000 (hex)
+		// Prev_Hash     : 00000000000000000026087ab13d78b5062f38bceb8fe2dc14c53e6b25057933
+		// Merkle_Root   : f42a1d6e97a8bc9f22e5516842b25ac4d53b2442b971b718a07e2c9d3085a5a5
+		// TimeStamp     : 5B30707C(2018-06-25 04:33:00) --> 5B30707E(2018-06-25 AM 4:33:02)
+		// Bits          : 389508950 (17376F56 hex)
+		// Nonce         : 1724593190(66cb3426 hex), found from Upper
+		// Midstate      : 5f4d60a25385c407c2a84e0c259169c410a4a54b93f71708f1abdfec6e8b81d2
 		{
-			//-------------------------------------------
 			//	Version
 			0x20,0x00,0x00,0x00,
 			//	Previous Block Hash
@@ -365,7 +349,6 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 			0x00,0x26,0x08,0x7a,//  2
 			0x00,0x00,0x00,0x00,//  1
 			0x00,0x00,0x00,0x00,//  0
-
 			//	Merkle Root
 //            1    2    3    4  
 			0x30,0x85,0xa5,0xa5,//  7
@@ -396,14 +379,19 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 	},
 
 	// Index 5
-	// #286819
 	{
+		// #286819 Block Header
+		// Hash          : 0000000000000000e067a478024addfecdc93628978aa52d91fabd4292982a50
+		// Version       : 00000002 hex
+		// Prev_Hash     : 000000000000000117c80378b8da0e33559b5997f2ad55e2f7d18ec1975b9717
+		// Merkle_Root   : 871714dcbae6c8193a2bb9b2a69fe1c0440399f38d94b3a0f1b447275a29978a
+		// TimeStamp     : 53058B1C(2014-02-20 AM 04:57:00) --> 53058B35(2014-02-20 AM 4:57:25)
+		// Bits          : 419520339 (19015F53 hex)
+		// Nonce         : 856192328 (33087548 hex), found from Upper
 		{
-			//-------------------------------------------
-			//	Version 00000002
+			//	Version
 			0x00,0x00,0x00,0x02,
 			//	Previous Block Hash
-			//000000000000000117c80378b8da0e33559b5997f2ad55e2f7d18ec1975b9717
 			0x97,0x5b,0x97,0x17,
 			0xf7,0xd1,0x8e,0xc1,
 			0xf2,0xad,0x55,0xe2,
@@ -412,9 +400,7 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 			0x17,0xc8,0x03,0x78,
 			0x00,0x00,0x00,0x01,
 			0x00,0x00,0x00,0x00,
-
 			//	Merkle Root
-			//871714dcbae6c8193a2bb9b2a69fe1c0440399f38d94b3a0f1b447275a29978a
 			0x5a,0x29,0x97,0x8a,
 			0xf1,0xb4,0x47,0x27,
 			0x8d,0x94,0xb3,0xa0,
@@ -428,13 +414,10 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 			//	53058B1C
 			0x53,0x05,0x8b,0x1c,
 			//	Bits
-			//	19015F53
 			0x19,0x01,0x5F,0x53,
 			//	Nonce
-			//	33087548
 			0x33,0x08,0x75,0x48
 		},
-		//0000000000000000e067a478024addfecdc93628978aa52d91fabd4292982a50
 		{
 			0x00,0x00,0x00,0x00,
 			0x00,0x00,0x00,0x00,
@@ -449,6 +432,56 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
 
 	// Index 6
 	{
+		// #679248 Block
+		// Hash          : 0000000000000000000a3d94f3176df0a23f748c96770f782d38bca9f1e12c03
+		// Version       : 2fffe000 (hex)
+		// Prev_Hash     : 0000000000000000000aba6e777bd7563e3d4b2e2b8a05ed514ba4b76979405d
+		// Merkle_Root   : 2d1d505ffbca998b4af8f393d0296eec114ff4183fd9f9871011574d4a7619ac
+		// TimeStamp     : 60777F6C(2021-04-14 PM 11:49:00) --> 60777F78(2021-04-14 PM 11:49:12)
+		// Bits          : 386673224 (170c2a48 hex)
+		// Nonce         : 272178830 (10391E8E hex), found from Upper and Lower
+		{
+			//	Version
+			0x2F,0xFF,0xE0,0x00,
+			//	Previous Block Hash
+			0x69,0x79,0x40,0x5d,
+			0x51,0x4b,0xa4,0xb7,
+			0x2b,0x8a,0x05,0xed,
+			0x3e,0x3d,0x4b,0x2e,
+			0x77,0x7b,0xd7,0x56,
+			0x00,0x0a,0xba,0x6e,
+			0x00,0x00,0x00,0x00,
+			0x00,0x00,0x00,0x00,
+			//	Merkle Root
+			0x4a,0x76,0x19,0xac,
+			0x10,0x11,0x57,0x4d,
+			0x3f,0xd9,0xf9,0x87,
+			0x11,0x4f,0xf4,0x18,
+			0xd0,0x29,0x6e,0xec,
+			0x4a,0xf8,0xf3,0x93,
+			0xfb,0xca,0x99,0x8b,
+			0x2d,0x1d,0x50,0x5f,
+			//	TimeStamp
+			//0x60,0x77,0x7F,0x6C,
+			0x60,0x77,0x7F,0x78,
+			//	Bits
+			0x17,0x0C,0x2A,0x48,
+			//	Nonce
+			0x10,0x39,0x1E,0x8E,
+		},
+		{
+			0x00,0x00,0x00,0x00,
+			0x00,0x00,0x00,0x00,
+			0x00,0x0a,0x3d,0x94,
+			0xf3,0x17,0x6d,0xf0,
+			0xa2,0x3f,0x74,0x8c,
+			0x96,0x77,0x0f,0x78,
+			0x2d,0x38,0xbc,0xa9,
+			0xf1,0xe1,0x2c,0x03,
+		}
+	},
+	// Index 8
+	{
 		{0,},
 		{0,}
 	}
@@ -458,9 +491,6 @@ static BLOCk_DATA_INFO gstGoldenData[7] = {
  *
  *	GetGoldenParameter
  *	Parameter : midstate
- *  
- * 
- * 
  */
 
 void GetGoldenParameter( uint8_t midstate[32], uint8_t param[12], uint8_t target[6] )
@@ -540,6 +570,10 @@ static bool set_vmask(int *vmask_003)
 	for (i = 0; i < cnt; i++)
 		tmpMask *= 16;
 
+	// vmask_003[0]:0x1fffe000
+	// vmask_003[1]:0x1fff0000
+	// vmask_003[2]:0xe000
+	// vmask_003[3]:0x0
 	vmask_003[2] = tmpMask;
 	vmask_003[1] = vmask_003[0] - tmpMask;
 
@@ -668,6 +702,9 @@ void GetGoldenVector( int idx, VECTOR_DATA *data, int enMidRandom )
 	uint8_t midstate[32];
 	int golenMidstate = 0;
 
+	memset( data, 0, sizeof(VECTOR_DATA) );
+	memcpy( data->data, gstGoldenData[idx].header, 80/*except padding*/ );
+
 	//	calculate midstate
 	{
 		sha256_ctx ctx;
@@ -684,7 +721,6 @@ void GetGoldenVector( int idx, VECTOR_DATA *data, int enMidRandom )
 	if( enMidRandom )
 	{
 		golenMidstate = random() % 4;
-		memset( data, 0, sizeof(VECTOR_DATA) );
 		switch( golenMidstate )
 		{
 			case 0:
@@ -785,7 +821,7 @@ static inline void flip80(void *dest_p, const void *src_p)
 		dest[i] = swab32(src[i]);
 }
 
-static inline void swab256(void *dest_p, const void *src_p)
+void swab256(void *dest_p, const void *src_p)
 {
 	uint32_t *dest = dest_p;
 	const uint32_t *src = src_p;
@@ -807,6 +843,10 @@ bool fulltest(const unsigned char *hash, const unsigned char *target)
 	bool rc = true;
 	int i;
 
+	printf("============ fulltest =============\n");
+	HexDump("hash", hash, 32);
+	HexDump("target", target, 32);
+
 	for (i = 28 / 4; i >= 0; i--) {
 		uint32_t h32tmp = le32toh(hash32[i]);
 		uint32_t t32tmp = le32toh(target32[i]);
@@ -820,7 +860,7 @@ bool fulltest(const unsigned char *hash, const unsigned char *target)
 			break;
 		}
 	}
-#ifdef DEBUG
+#if	DEBUG
 	unsigned char hash_swap[32], target_swap[32];
 	char *hash_str, *target_str;
 
@@ -829,7 +869,7 @@ bool fulltest(const unsigned char *hash, const unsigned char *target)
 	hash_str = bin2hex(hash_swap, 32);
 	target_str = bin2hex(target_swap, 32);
 
-	printf("Proof: %s\nTarget: %s\nTrgVal? %s\n",
+	printf("Proof:  %s\nTarget: %s\nTrgVal? %s\n",
 		hash_str,
 		target_str,
 		rc ? "YES (hash <= target)" :
@@ -845,7 +885,7 @@ bool fulltest(const unsigned char *hash, const unsigned char *target)
  * nonce adjusted. Returns true if the work target is met. */
 bool submit_tested_work(VECTOR_DATA *data)
 {
-	if (!fulltest(data->hash, data->target)) {
+	if (!fulltest(data->hash, data->current_target)) {
 		printf("Failed. Share above target!\n");
 		return false;
 	}
@@ -855,29 +895,27 @@ bool submit_tested_work(VECTOR_DATA *data)
 static void regen_hash(VECTOR_DATA *data)
 {
 	uint32_t *data32 = (uint32_t *)(data->data);
-#ifdef DEBUG
-	printf("%s data32:0x%08x\n", __FUNCTION__, *data32);
-#endif
+
 	unsigned char swap[80];
 	uint32_t *swap32 = (uint32_t *)swap;
 	unsigned char hash1[32];
 
 	flip80(swap32, data32);
+#if DEBUG
+	HexDump("after_swap_header", swap32, 128);
+#endif
 	sha256(swap, 80, hash1);
 	sha256(hash1, 32, (unsigned char *)(data->hash));
-
-#ifdef DEBUG
-	DumpData("data->hash", data->hash, sizeof(data->hash));
-#endif
 }
 
 // Fills in the work nonce and builds the output data in data->hash
 static void rebuild_nonce(VECTOR_DATA *data, uint32_t nonce)
 {
-	uint32_t *work_nonce = (uint32_t *)(data->nonce);
+	uint32_t *work_nonce = (uint32_t *)(data->data + 64 + 12);
+
 	*work_nonce = htole32(nonce);
-#ifdef DEBUG
-	printf("%s work_nonce:0x%08x\n", __FUNCTION__, *work_nonce);
+#if DEBUG
+	HexDump("header_with_nonce", data->data, 128);
 #endif
 
 	regen_hash(data);
@@ -886,7 +924,9 @@ static void rebuild_nonce(VECTOR_DATA *data, uint32_t nonce)
 bool test_nonce(VECTOR_DATA *data, uint32_t nonce)
 {
 	uint32_t *hash_32 = (uint32_t *)(data->hash + 28);
+
 	rebuild_nonce(data, nonce);
+	printf("%s to test nonce\n", (*hash_32 == 0) ? "succeed":"failed");
 	return (*hash_32 == 0);
 }
 
@@ -902,11 +942,42 @@ bool submit_nonce(VECTOR_DATA *data, uint32_t nonce)
 	return true;
 }
 
+int arrLeftShift(uint8_t* arr, int shift)
+{
+    int ret = 0;
+    do {
+        if (arr-shift == NULL)
+            return -1;
+
+        memmove(arr-shift, arr, sizeof(uint8_t)*shift);
+        // fill 0
+        for (int i = 0; i < shift; i++) {
+            arr[2-i] = 0;
+        }
+    } while(0);
+
+    return ret;
+}
+
+/* Target = coefficient * 2 ^ (8 * (index - 3))
+ * ex> nBits : 0x1729D72D --> coefficient: 0x29D72D, index: 0x17
+ *     Target = 0x29D72D * 2 ^ (8 * (0x17-3))
+ *            = 0x00000000_00000000_0029D72D_00000000_00000000_00000000_00000000_00000000 */
+void target_from_nbits(uint8_t *nbits, uint8_t *current_target)
+{
+	uint8_t result[32] = { 0x00, };
+
+    memcpy(result+29, nbits+1, sizeof(uint8_t) * 3);
+    arrLeftShift(result+29, (nbits[0]-3));
+    memcpy(current_target, result, 32);
+}
+
 void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
 {
 	uint8_t select0, select1, shift = 0;
 	int32_t offset = 0;
 	uint8_t midstate[32], midstate1[32], midstate2[32], midstate3[32];
+	unsigned char hash_target[32];
 
 	//	calculate midstate with version rolling
 	int vmask_003[4];
@@ -916,8 +987,9 @@ void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
 
 	set_vmask(vmask_003);
 	bbversion = bin2hex(gstGoldenData[idx].header, 4);
-
 	get_vmask(bbversion, vmask_003, vmask_001);
+	free(bbversion);
+
 	calc_midstate (data, idx, vmask_001,
 					midstate, midstate1, midstate2, midstate3);
 
@@ -948,6 +1020,13 @@ void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
 	offset = 64 + 12;
 	//	Fill Hash
 	memcpy( data->hash, gstGoldenData[idx].hash, sizeof(gstGoldenData[idx].hash) );
+	//	Fill Golden Nonce
+	memcpy( data->nonce, gstGoldenData[idx].header + offset, 4 );
+
+	// generate current_target from nbits
+	memcpy(data->nbits, data->target, 4);
+	target_from_nbits(data->nbits, hash_target);
+	swab256(data->current_target, hash_target);
 
 	//	make full range nonce
 	data->startNonce[0] = 0x00;

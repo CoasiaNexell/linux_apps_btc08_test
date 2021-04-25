@@ -195,25 +195,24 @@ static int handleGN3(BTC08_HANDLE handle, uint8_t chipId, uint8_t *found_nonce, 
 	int ret = 0, result = 0;
 	uint8_t hash[128] = {0x00,};
 	unsigned int hash_size = sizeof(hash)/sizeof(hash[0]);
+	uint8_t zero_hash[128] = {0x00,};
 	uint8_t res[18] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-	bool lower3, lower2, lower, upper, validCnt;
-	uint32_t cal_gn;
 	char buf[512];
+
+	memset(zero_hash, 0, sizeof(zero_hash));
 
 	// Sequence 1. Read Hash
 	ret = Btc08ReadHash(handle, chipId, hash, hash_size);
 	if (ret == 0) {
 		for (int i=0; i<4; i++)
 		{
-			result = memcmp(data->hash, &(hash[i*32]), 32);
-			if (result == 0)
+			result = memcmp(zero_hash, &(hash[i*32]), 32);
+			if (result != 0)
 			{
-				sprintf(buf, "Inst_%s", (i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
-				NxDbgMsg(NX_DBG_INFO, "%5s Result Hash of %s!!!\n", "", buf);
-#if DEBUG
+				sprintf(buf, "Hash of Inst_%s",
+						(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
 				HexDump(buf, &(hash[i*32]), 32);
-#endif
 			}
 		}
 	} else
@@ -221,23 +220,17 @@ static int handleGN3(BTC08_HANDLE handle, uint8_t chipId, uint8_t *found_nonce, 
 
 	// Sequence 2. Read Result to read GN and clear GN IRQ
 	ret = Btc08ReadResult(handle, chipId, res, res_size);
-	if (ret == 0) {
-#if DEBUG
-		HexDump("read_result:", res, 18);
-		validCnt = res[16];
-		lower3   = ((res[17] & (1<<3)) != 0);
-		lower2   = ((res[17] & (1<<2)) != 0);
-		lower    = ((res[17] & (1<<1)) != 0);
-		upper    = ((res[17] & (1<<0)) != 0);
-
-		NxDbgMsg(NX_DBG_INFO, "%5s [%s %s %s %s found golden nonce ]\n", "",
-				lower3 ? "Inst_Lower_3,":"", lower2 ? "Inst_Lower_2,":"",
-				lower  ?   "Inst_Lower,":"", upper  ?   "Inst_Upper":"");
-#endif
-
+	if (ret == 0)
+	{
 		*micro_job_id = res[17];
-		for (int i=0; i<4; i++) {
+		for (int i=0; i<4; i++)
+		{
 			memcpy(&(found_nonce[i*4]), &(res[i*4]), 4);
+			if((*micro_job_id & (1<<i)) != 0) {
+				sprintf(buf, "Nonce of Inst_%s",
+						(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
+				HexDump(buf, &(res[i*4]), 4);
+			}
 		}
 	} else
 		return -1;
@@ -843,7 +836,6 @@ static void TestInfiniteWorkLoop()
 					{
 						for (int i=0; i<4; i++)
 						{
-							found_nonce[i] = bswap_32(found_nonce[i]);
 							if((micro_job_id & (1<<i)) != 0)
 							{
 								memcpy(&data, &(vmask_001[(1<<i)]), 4);
@@ -1094,12 +1086,13 @@ static void TestWorkLoop_RandomVector()
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_GN))	// Check GN GPIO pin
 		{
 			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
+			gn_jobid  = res[1];
 			gn_irq 	  = res[2] & (1<<0);
 			chipId    = res[3];
 
 			if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
 				// Check if found GN(0x66cb3426) is correct and submit nonce to pool server and then go loop again
-				NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d!!! ===\n", "", chipId);
+				NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d gn_jobid:%d!!! ===\n", "", chipId, gn_jobid);
 
 				if( 0 != handleGN2(handle, chipId, &data) )
 				{
