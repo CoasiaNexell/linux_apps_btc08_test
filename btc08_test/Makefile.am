@@ -20,4 +20,5 @@ btc08_test_SOURCES = \
 	SimpleWork.c \
 	ScenarioTest.c \
 	TestVector.c \
+	TestFunction.c \
 	main.c

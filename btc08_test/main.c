@@ -21,6 +21,7 @@ static void l1_command_liist()
 	printf("  1. Single Command\n");
 	printf("  2. Simple Work\n");
 	printf("  3. Scenario Test\n");
+	printf("  4. Function Test\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -61,6 +62,12 @@ int main( int argc, char *argv[] )
 		else if( !strcasecmp(cmd[0], "3") )
 		{
 			ScenarioTestLoop();
+		}
+		//----------------------------------------------------------------------
+		// Function Test
+		else if( !strcasecmp(cmd[0], "4") )
+		{
+			FuntionTestLoop();
 		}
 	}
 
