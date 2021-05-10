@@ -80,7 +80,6 @@ typedef struct BLOCk_DATA_INFO {
 	uint8_t hash[32];		//	hash result
 } BLOCk_DATA_INFO;
 
-uint32_t vmask_001[16];
 //
 //	Block Header ( 128 Bytes )
 //
@@ -674,36 +673,6 @@ static void calc_midstate(VECTOR_DATA *header, int idx, uint32_t *vmask_001,
 	cg_memcpy(midstate, ctx.h, 32);
 }
 
-static inline uint32_t swab32(uint32_t v)
-{
-	return bswap_32(v);
-}
-
-static inline void flip80(void *dest_p, const void *src_p)
-{
-	uint32_t *dest = dest_p;
-	const uint32_t *src = src_p;
-	int i;
-
-	for (i = 0; i < 20; i++)
-		dest[i] = swab32(src[i]);
-}
-
-static inline void swab256(void *dest_p, const void *src_p)
-{
-	uint32_t *dest = dest_p;
-	const uint32_t *src = src_p;
-
-	dest[0] = swab32(src[7]);
-	dest[1] = swab32(src[6]);
-	dest[2] = swab32(src[5]);
-	dest[3] = swab32(src[4]);
-	dest[4] = swab32(src[3]);
-	dest[5] = swab32(src[2]);
-	dest[6] = swab32(src[1]);
-	dest[7] = swab32(src[0]);
-}
-
 //
 //						Find Target for BTC08
 //
@@ -856,8 +825,6 @@ bool fulltest(const unsigned char *hash, const unsigned char *target)
 	int i;
 
 	printf("============ fulltest =============\n");
-	HexDump("hash", hash, 32);
-	HexDump("target", target, 32);
 
 	for (i = 28 / 4; i >= 0; i--) {
 		uint32_t h32tmp = le32toh(hash32[i]);
@@ -913,11 +880,13 @@ static void regen_hash(VECTOR_DATA *data)
 	unsigned char hash1[32];
 
 	flip80(swap32, data32);
-#if DEBUG
+#if 1
 	HexDump("after_swap_header", swap32, 128);
 #endif
 	sha256(swap, 80, hash1);
 	sha256(hash1, 32, (unsigned char *)(data->hash));
+
+	HexDump("regen_hash", data->hash, 32);
 }
 
 // Fills in the work nonce and builds the output data in data->hash
@@ -926,7 +895,7 @@ static void rebuild_nonce(VECTOR_DATA *data, uint32_t nonce)
 	uint32_t *work_nonce = (uint32_t *)(data->data + 64 + 12);
 
 	*work_nonce = htole32(nonce);
-#if DEBUG
+#if 1
 	HexDump("header_with_nonce", data->data, 128);
 #endif
 
@@ -936,17 +905,20 @@ static void rebuild_nonce(VECTOR_DATA *data, uint32_t nonce)
 bool test_nonce(VECTOR_DATA *data, uint32_t nonce)
 {
 	uint32_t *hash_32 = (uint32_t *)(data->hash + 28);
-
+	HexDump("hash", data->hash, 32);
 	rebuild_nonce(data, nonce);
+	printf("(*hash_32 == 0):%d\n", (*hash_32 == 0));
 	return (*hash_32 == 0);
 }
 
 bool submit_nonce(VECTOR_DATA *data, uint32_t nonce)
 {
 	if (test_nonce(data, nonce)) {
+		printf("1111\n");
 		submit_tested_work(data);
 	}
 	else {
+		printf("2222\n");
 		return false;
 	}
 
@@ -999,10 +971,10 @@ void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
 
 	set_vmask(vmask_003);
 	bbversion = bin2hex(gstGoldenData[idx].header, 4);
-	get_vmask(bbversion, vmask_003, vmask_001);
+	get_vmask(bbversion, vmask_003, data->vmask_001);
 	free(bbversion);
 
-	calc_midstate (data, idx, vmask_001,
+	calc_midstate (data, idx, data->vmask_001,
 					midstate, midstate1, midstate2, midstate3);
 
 	memcpy(data->midState, midstate, 32);

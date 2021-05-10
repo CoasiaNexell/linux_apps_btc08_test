@@ -18,6 +18,10 @@ typedef struct VECTOR_DATA {
 	//	result
 	uint8_t nonce[4];
 	uint8_t hash[32];
+
+	// version rolling
+	uint32_t vmask_001[16];
+	int job_id;
 } VECTOR_DATA;
 
 //	midstate length : 32, 32*4 : for asic booster
@@ -30,7 +34,7 @@ uint8_t default_golden_target[6];
 uint8_t default_golden_hash[32];
 uint8_t golden_enable[32];
 
-#define MAX_NUM_VECTOR		(6)
+#define MAX_NUM_VECTOR		(7)
 
 void GetBistVector( VECTOR_DATA *data );
 void GetGoldenVector( int idx, VECTOR_DATA *data, int enMidRandom );

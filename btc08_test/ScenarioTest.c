@@ -484,10 +484,9 @@ static void *WorkLoop( void *arg )
 					{
 						for (int i=0; i<4; i++)
 						{
-							found_nonce[i] = bswap_32(found_nonce[i]);
 							if((micro_job_id & (1<<i)) != 0)
 							{
-								memcpy(&data, &(vmask_001[(1<<i)]), 4);
+								memcpy(&data, &(data.vmask_001[(1<<i)]), 4);
 								if (!submit_nonce(&data, found_nonce[i])) {
 									NxDbgMsg(NX_DBG_ERR, "%5s Failed: invalid nonce 0x%08x\n", "", found_nonce[i]);
 									hService->bExitWorkLoop = 1;

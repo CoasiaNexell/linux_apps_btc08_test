@@ -215,6 +215,36 @@ char *bin2hex(const unsigned char *p, size_t len)
 	return s;
 }
 
+/* 0x12345678 --> 0x56781234*/
+void swap16_(void *dest_p, const void *src_p)
+{
+	uint32_t *dest = dest_p;
+	const uint32_t *src = src_p;
+
+	*dest =     ((*src & 0xFF) << 16) |     ((*src & 0xFF00) << 16) |
+			((*src & 0xFF0000) >> 16) | ((*src & 0xFF000000) >> 16);
+}
+
+uint32_t swab32(uint32_t v)
+{
+	return bswap_32(v);
+}
+
+void swab256(void *dest_p, const void *src_p)
+{
+	uint32_t *dest = dest_p;
+	const uint32_t *src = src_p;
+
+	dest[0] = swab32(src[7]);
+	dest[1] = swab32(src[6]);
+	dest[2] = swab32(src[5]);
+	dest[3] = swab32(src[4]);
+	dest[4] = swab32(src[3]);
+	dest[5] = swab32(src[2]);
+	dest[6] = swab32(src[1]);
+	dest[7] = swab32(src[0]);
+}
+
 void flip64(void *dest_p, const void *src_p)
 {
 	uint32_t *dest = dest_p;
@@ -224,6 +254,17 @@ void flip64(void *dest_p, const void *src_p)
 	for (i = 0; i < 16; i++)
 		dest[i] = bswap_32(src[i]);
 }
+
+void flip80(void *dest_p, const void *src_p)
+{
+	uint32_t *dest = dest_p;
+	const uint32_t *src = src_p;
+	int i;
+
+	for (i = 0; i < 20; i++)
+		dest[i] = swab32(src[i]);
+}
+
 
 //------------------------------------------------------------------------------
 // Shell utils

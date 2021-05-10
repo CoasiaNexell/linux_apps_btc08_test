@@ -113,16 +113,6 @@ static void SetPll(BTC08_HANDLE handle, int chipId, int pll_idx)
 	NxDbgMsg(NX_DBG_ERR, "%5s [chip#%d] pll lock status: %s\n", "", chipId, (lock_status == 1) ? "locked":"unlocked");
 }
 
-/* 0x12345678 --> 0x56781234*/
-static inline void swap16_(void *dest_p, const void *src_p)
-{
-	uint32_t *dest = dest_p;
-	const uint32_t *src = src_p;
-
-	*dest =     ((*src & 0xFF) << 16) |     ((*src & 0xFF00) << 16) |
-			((*src & 0xFF0000) >> 16) | ((*src & 0xFF000000) >> 16);
-}
-
 static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 {
 	int ret = 0, result = 0;
@@ -489,7 +479,7 @@ static void TestWork(uint8_t last_chipId)
 	DestroyBtc08( handle );
 }
 
-/* Process 4 works with asicboost at first.
+/* Process the same works with asicboost. version mask is not supported.
  * If OON IRQ occurs, check READ_JOB_ID, clear OON and then pass the additional work to job fifo.
  * If GN IRQ occurs, read GN and then clear GN IRQ.
  * Test Results
@@ -730,6 +720,97 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
 	DestroyBtc08( handle );
 }
 
+static void dump_work(char* title, struct VECTOR_DATA *work)
+{
+	char *header, *prev_blockhash, *merkle_root, *timestamp, *nbits;
+	char *midstate, *midstate1, *midstate2, *midstate3, *target;
+
+	header         = bin2hex(work->data,         128);
+	prev_blockhash = bin2hex(work->data+4,        32);
+	merkle_root    = bin2hex(work->data+4+32,     32);
+	timestamp      = bin2hex(work->data+4+32+32,   4);
+	nbits          = bin2hex(work->data+4+32+32+4, 4);
+
+	midstate       = bin2hex(work->midState,      32);
+	midstate1      = bin2hex(work->midState+32,     32);
+	midstate2      = bin2hex(work->midState+32+32,     32);
+	midstate3      = bin2hex(work->midState+32+32+32,     32);
+	target         = bin2hex(work->target,        32);
+
+	NxDbgMsg(NX_DBG_INFO,  "================== %s ==================\n", title);
+	NxDbgMsg(NX_DBG_INFO, "header        : %s\n", header);
+	NxDbgMsg(NX_DBG_INFO, "prev_blockhash: %s\n", prev_blockhash);
+	NxDbgMsg(NX_DBG_INFO, "merkle_root   : %s\n", merkle_root);
+	NxDbgMsg(NX_DBG_INFO, "timestamp     : %s\n", timestamp);
+	NxDbgMsg(NX_DBG_INFO, "nbits         : %s\n", nbits);
+
+	NxDbgMsg(NX_DBG_INFO, "midstate      : %s\n", midstate);
+	NxDbgMsg(NX_DBG_INFO, "midstate1     : %s\n", midstate1);
+	NxDbgMsg(NX_DBG_INFO, "midstate2     : %s\n", midstate2);
+	NxDbgMsg(NX_DBG_INFO, "midstate3     : %s\n", midstate3);
+	NxDbgMsg(NX_DBG_INFO, "target        : %s\n", target);
+
+	free(header);
+	free(prev_blockhash);
+	free(merkle_root);
+	free(timestamp);
+	free(nbits);
+	free(midstate);
+	free(midstate1);
+	free(midstate2);
+	free(midstate3);
+	free(target);
+	NxDbgMsg(NX_DBG_INFO, "=======================================================================\n");
+}
+
+static void dump_work_list(BTC08_HANDLE handle)
+{
+	char s[1024];
+
+	for (int i=0; i < JOB_ID_NUM_MASK; i++)
+	{
+		snprintf(s, sizeof(s), "[WORK LIST] handle->work[%d] index:%d\n",
+				i, handle->work[i].job_id);
+		NxDbgMsg(NX_DBG_INFO, "%s", s);
+	}
+}
+
+static bool set_work(BTC08_HANDLE handle, VECTOR_DATA *data)
+{
+	bool retval = false;
+	int job_id = handle->last_queued_id + 1;
+
+	Btc08WriteParam(handle, BCAST_CHIP_ID, data->midState, data->parameter);
+	Btc08WriteTarget(handle, BCAST_CHIP_ID, data->target);
+	DistributionNonce(handle);
+	for( int i=0; i<handle->numChips ; i++ )
+	{
+		NxDbgMsg( NX_DBG_INFO, "Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n", i, handle->numCores[i],
+			handle->startNonce[i][0], handle->startNonce[i][1], handle->startNonce[i][2], handle->startNonce[i][3],
+			handle->endNonce[i][0], handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3] );
+		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
+	}
+	NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", job_id);
+	if (-1 != Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), job_id))
+	{
+		memset(&(handle->work[handle->last_queued_id]), 0,    sizeof(struct VECTOR_DATA));
+		memcpy(&(handle->work[handle->last_queued_id]), data, sizeof(struct VECTOR_DATA));
+		handle->work[handle->last_queued_id].job_id = job_id;
+#if DEBUG
+			char s[2048];
+			snprintf(s, sizeof(s), "[NEW WORK] handle->work[%d] local_job_id:%d, work_job_id:%d\n",
+					handle->last_queued_id, job_id, handle->work[handle->last_queued_id].job_id);
+			dump_work(s, &(handle->work[handle->last_queued_id]));
+			dump_work_list(handle);
+#endif
+		handle->last_queued_id++;
+		if (handle->last_queued_id >= JOB_ID_NUM_MASK)		// range: 0 ~ JOB_ID_NUM_MASK (0~7)
+			handle->last_queued_id = 0;
+	}
+
+	return retval;
+}
+
 /* Process the works with asicboost and version mask. (4 works > oon > 2 works > oon > 2 works > ...)
  * If OON IRQ occurs, clear OON and then pass the additional work to job fifo.
  * If GN IRQ occurs, read GN and then clear GN IRQ.
@@ -739,7 +820,7 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId)
  */
 static void TestInfiniteWorkLoop()
 {
-	uint8_t chipId = 0x00, jobId = 0x01;
+	uint8_t chipId = 0x00;
 	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id = 0x00;
 	uint8_t res[4] = {0x00,};
 	uint8_t oon_jobid, gn_jobid;
@@ -752,6 +833,7 @@ static void TestInfiniteWorkLoop()
 	double megaHash;
 	uint8_t micro_job_id;
 	uint32_t found_nonce[4];
+	int index = 0;
 
 	// Seqeunce 1. Create Handle
 	BTC08_HANDLE handle = CreateBtc08(0);
@@ -797,24 +879,13 @@ static void TestInfiniteWorkLoop()
 	// Sequence 7. Enable OON IRQ/Set UART divider
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
 
-	// Sequence 8. Setting parameters, target, nonce range
-	GetGoldenVectorWithVMask(4, &data, 0);
-	Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
-	Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
-	DistributionNonce(handle);
-	for( int i=0; i<handle->numChips ; i++ )
-	{
-		NxDbgMsg( NX_DBG_INFO, "Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n", i, handle->numCores[i],
-			handle->startNonce[i][0], handle->startNonce[i][1], handle->startNonce[i][2], handle->startNonce[i][3],
-			handle->endNonce[i][0], handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3] );
-		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
-	}
-
-	// Sequence 9. Run job
+	// Sequence 8. Setting parameters, target, nonce range, run job
 	for (int i = 0; i < MAX_JOB_FIFO_NUM; i++)
 	{
-		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
-		Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+		GetGoldenVectorWithVMask(index++, &data, 0);
+		set_work(handle, &data);
+		if (index >= MAX_NUM_VECTOR)
+			index = 0;
 	}
 
 	startTime = get_current_ms();
@@ -834,12 +905,22 @@ static void TestInfiniteWorkLoop()
 				if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
 					if (0 == handleGN3(handle, chipId, (uint8_t *)found_nonce, &micro_job_id, &data))
 					{
+						struct VECTOR_DATA work;
+						memcpy(&work, &(handle->work[gn_job_id - 1]), sizeof(struct VECTOR_DATA));
+						memset(work.data+76, 0, 4);
+						memset(work.hash, 0, 32);
+						HexDump("work", &work, sizeof(struct VECTOR_DATA));
+
 						for (int i=0; i<4; i++)
 						{
 							if((micro_job_id & (1<<i)) != 0)
 							{
-								memcpy(&data, &(vmask_001[(1<<i)]), 4);
-								if (!submit_nonce(&data, found_nonce[i])) {
+								memcpy(work.data, &(work.vmask_001[(1<<i)]), 4);
+#if DEBUG
+								dump_work("[GN]", &work);
+								dump_work_list(handle);
+#endif
+								if (!submit_nonce(&work, found_nonce[i])) {
 									NxDbgMsg(NX_DBG_ERR, "%5s Failed: invalid nonce 0x%08x\n", "", found_nonce[i]);
 									isErr = true;
 									break;
@@ -870,14 +951,13 @@ static void TestInfiniteWorkLoop()
 
 			prevTime = currTime;
 
-			NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
-			Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
-			if (jobId > MAX_JOB_ID)
-				jobId = 1;
-			NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
-			Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
-			if (jobId > MAX_JOB_ID)
-				jobId = 1;
+			for (int i = 0; i < 2; i++)
+			{
+				GetGoldenVectorWithVMask(index, &data, 0);
+				set_work(handle, &data);
+				if (index >= MAX_NUM_VECTOR)
+					index = 0;
+			}
 		}
 		sched_yield();
 	}
@@ -989,7 +1069,7 @@ static int handleGN2(BTC08_HANDLE handle, uint8_t chipId, VECTOR_DATA *data)
 	return (bHash&&bNonce) ? 0 : -1;
 }
 
-
+/* Useful for finding timestamps */
 static void TestWorkLoop_RandomVector()
 {
 	int ii;

@@ -297,7 +297,7 @@ static int TestWRTarget( BTC08_HANDLE handle )
 			Btc08ReadTarget(handle, chipId, res, 6);
 			if (0 != memcmp(default_golden_target, res, 6))
 			{
-				NxDbgMsg( NX_DBG_INFO, "=== %5s Failed READ_TARGET(chip#%d) ==\n", "", chipId);
+				NxDbgMsg(NX_DBG_ERR, "=== Failed READ_TARGET(chip#%d) ==\n", chipId);
 				if (debug) {
 					HexDump("write_target:", default_golden_target, 6);
 					sprintf(title, "chipId(%d) read_target:", chipId);
@@ -308,12 +308,12 @@ static int TestWRTarget( BTC08_HANDLE handle )
 		}
 		else
 		{
-			NxDbgMsg( NX_DBG_INFO, "=== %5s Failed WRITE_TARGET(per Chip) due to spi err ==\n", "");
+			NxDbgMsg(NX_DBG_ERR, "=== Failed WRITE_TARGET(per Chip) due to spi err ==\n");
 			return -1;
 		}
 	}
 
-	NxDbgMsg( NX_DBG_INFO, "=== WRITE_TARGET(BR) ==\n");
+	NxDbgMsg(NX_DBG_INFO, "=== WRITE_TARGET(BR) ==\n");
 	if (0 == Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target))
 	{
 		for (int chipId=1; chipId <= numChips; chipId++)
@@ -321,7 +321,7 @@ static int TestWRTarget( BTC08_HANDLE handle )
 			Btc08ReadTarget(handle, chipId, res, 6);
 			if (0 != memcmp(default_golden_target, res, 6))
 			{
-				NxDbgMsg( NX_DBG_INFO, "=== %5s Failed READ_TARGET(chip#%d) ==\n", "", chipId);
+				NxDbgMsg(NX_DBG_ERR, "=== Failed READ_TARGET(chip#%d) ==\n", chipId);
 				HexDump("write_target:", default_golden_target, 6);
 				sprintf(title, "chipId(%d) read_target:", chipId);
 				HexDump(title, res, 6);
@@ -331,11 +331,11 @@ static int TestWRTarget( BTC08_HANDLE handle )
 	}
 	else
 	{
-		NxDbgMsg( NX_DBG_INFO, "=== %5s Failed WRITE_TARGET(BR) due to spi err ==\n", "");
+		NxDbgMsg(NX_DBG_ERR, "=== Failed WRITE_TARGET(BR) due to spi err ==\n");
 		return -1;
 	}
 
-	NxDbgMsg(NX_DBG_INFO, "=== %5s Succeed READ/WRITE_TARGET ==\n", "");
+	NxDbgMsg(NX_DBG_INFO, "=== Succeed READ/WRITE_TARGET ==\n");
 
 	return 0;
 }
@@ -392,7 +392,7 @@ static int TestWRDisable( BTC08_HANDLE handle )
 	{
 		NxDbgMsg( NX_DBG_INFO, "=== SET_DISABLE(chip%d) ==\n", chipId);
 
-		if (0 == Btc08SetDisable(handle, chipId, test_data3[chipId-1]))
+		if (0 == Btc08SetDisable(handle, chipId, test_data1[chipId-1]))
 		{
 			// RUN_BIST
 			Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
@@ -414,17 +414,17 @@ static int TestWRDisable( BTC08_HANDLE handle )
 
 			// READ_DISABLE
 			Btc08ReadDisable(handle, chipId, res, 32);
-			if (0 != memcmp(test_data3[chipId-1], res, 32))
+			if (0 != memcmp(test_data1[chipId-1], res, 32))
 			{
-				NxDbgMsg(NX_DBG_INFO, "=== %5s Failed READ_DISABLE(chip#%d) ==\n", "", chipId);
-				HexDump("set_disable:", test_data3[chipId-1], 32);
+				NxDbgMsg(NX_DBG_ERR, "=== Failed READ_DISABLE(chip#%d) ==\n", chipId);
+				HexDump("set_disable:", test_data1[chipId-1], 32);
 				sprintf(title, "chipId(%d) read_disable:", chipId);
 				HexDump(title, res, 32);
 				return -1;
 			}
 		}
 		else {
-			NxDbgMsg( NX_DBG_INFO, "=== %5s Failed SET_DISABLE(per Chip) due to spi err ==\n", "");
+			NxDbgMsg(NX_DBG_ERR, "=== Failed SET_DISABLE(per Chip) due to spi err ==\n");
 			return -1;
 		}
 	}
@@ -457,7 +457,7 @@ static int TestWRDisable( BTC08_HANDLE handle )
 			Btc08ReadDisable(handle, chipId, res, 32);
 			if (0 != memcmp(enable_all, res, 32))
 			{
-				NxDbgMsg(NX_DBG_INFO, "=== Failed READ_DISABLE(chip#%d) ==\n", chipId);
+				NxDbgMsg(NX_DBG_ERR, "=== Failed READ_DISABLE(chip#%d) ==\n", chipId);
 				HexDump("set_disable:", enable_all, 32);
 				sprintf(title, "chipId(%d) read_disable:", chipId);
 				HexDump(title, res, 32);
@@ -466,7 +466,7 @@ static int TestWRDisable( BTC08_HANDLE handle )
 		}
 	}
 	else {
-		NxDbgMsg( NX_DBG_INFO, "=== Failed SET_DISABLE(BR) due to spi err ==\n");
+		NxDbgMsg(NX_DBG_ERR, "=== Failed SET_DISABLE(BR) due to spi err ==\n");
 		return -1;
 	}
 
@@ -496,7 +496,7 @@ static int TestReadRevision( BTC08_HANDLE handle )
 
 			if (0 != memcmp(fixed_rev, res, 4))
 			{
-				NxDbgMsg(NX_DBG_INFO, "=== Not matched revision ==\n");
+				NxDbgMsg(NX_DBG_ERR, "=== Not matched revision ==\n");
 				HexDump("READ_REVISION", res, 4);
 				HexDump("fixed_rev", fixed_rev, 4);
 				return -1;
@@ -504,7 +504,7 @@ static int TestReadRevision( BTC08_HANDLE handle )
 		}
 		else
 		{
-			NxDbgMsg(NX_DBG_INFO, "=== Failed READ_REVISION ==\n");
+			NxDbgMsg(NX_DBG_ERR, "=== Failed READ_REVISION ==\n");
 			return -1;
 		}
 	}
@@ -535,7 +535,7 @@ static int TestReadFeature( BTC08_HANDLE handle )
 
 			if (0 != memcmp(fixed_feature, res, 4))
 			{
-				NxDbgMsg(NX_DBG_INFO, "=== %5s Not matched feature ==\n", "");
+				NxDbgMsg(NX_DBG_ERR, "=== Not matched feature ==\n");
 				HexDump("READ_FEATURE", res, 4);
 				HexDump("fixed_feature", fixed_feature, 4);
 				return -1;
@@ -543,11 +543,11 @@ static int TestReadFeature( BTC08_HANDLE handle )
 		}
 		else
 		{
-			NxDbgMsg(NX_DBG_INFO, "=== %5s Failed READ_FEATURE due to spi err ==\n", "");
+			NxDbgMsg(NX_DBG_ERR, "=== Failed READ_FEATURE due to spi err ==\n");
 			return -1;
 		}
 	}
-	NxDbgMsg(NX_DBG_INFO, "=== %5s Succeed READ_FEATURE ==\n", "");
+	NxDbgMsg(NX_DBG_INFO, "=== Succeed READ_FEATURE ==\n");
 
 	return 0;
 }
