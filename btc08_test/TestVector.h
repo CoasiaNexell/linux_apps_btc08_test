@@ -21,6 +21,7 @@ typedef struct VECTOR_DATA {
 
 	// version rolling
 	uint32_t vmask_001[16];
+	int job_id;
 } VECTOR_DATA;
 
 //	midstate length : 32, 32*4 : for asic booster

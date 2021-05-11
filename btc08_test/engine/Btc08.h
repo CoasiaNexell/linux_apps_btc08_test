@@ -50,6 +50,9 @@
 
 typedef struct tag_BTC08_INFO *BTC08_HANDLE;
 
+#define MAX_JOB_FIFO			4
+#define JOB_ID_NUM_MASK         (MAX_JOB_FIFO*2-1)	/* total 7 */
+
 #define	SPI_MAX_TRANS	(1024)
 #define MAX_CHIPS		(32)
 #define MAX_CORES		(255)
@@ -61,6 +64,9 @@ struct tag_BTC08_INFO{
 	SPI_HANDLE		hSpi;
 
 	bool			isAsicBoost;
+	VECTOR_DATA     work[JOB_ID_NUM_MASK];
+
+	uint8_t         last_queued_id;
 
 	int32_t			numChips;
 	int32_t			numCores[MAX_CHIPS];
