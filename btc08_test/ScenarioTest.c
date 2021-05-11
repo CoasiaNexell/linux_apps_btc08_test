@@ -31,7 +31,8 @@ static void simplework_command_list()
 	printf("========== Scenario =========\n");
 	printf("  1. Start Mining\n");
 	printf("  2. Stop Mining\n");
-	printf("  3. Bist with the pll freq(300~1000MHz)\n");
+	printf("  3. Bist with the pll freq\n");
+	printf("  ex> 3 400 (default:300~1000MHz)\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -484,7 +485,6 @@ static void *WorkLoop( void *arg )
 					{
 						for (int i=0; i<4; i++)
 						{
-							found_nonce[i] = bswap_32(found_nonce[i]);
 							if((micro_job_id & (1<<i)) != 0)
 							{
 								memcpy(&data, &(vmask_001[(1<<i)]), 4);
@@ -652,7 +652,7 @@ static void StopService( SERVICE_INFO *hService )
 	pthread_mutex_unlock( &hServiceLock );
 }
 
-static void ChipSortingBIST()
+static void ChipSortingBIST(int pll_freq)
 {
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
@@ -686,9 +686,9 @@ static void ChipSortingBIST()
 
 	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
 
-	for (int pll_idx = 0; pll_idx < NUM_PLL_SET; pll_idx++)
+	if (pll_freq != 0)
 	{
-		freq = GetPllIdx2Freq(pll_idx);
+		freq = pll_freq;
 
 		// seq2. set(change) pll to each chip
 		SetPllFreq(handle, freq);
@@ -706,6 +706,30 @@ static void ChipSortingBIST()
 
 		// seq6. report result (pll freq, temperature, number of cores)
 		reportBistResult(freq, temperature, handle);
+	}
+	else
+	{
+		for (int pll_idx = 0; pll_idx < NUM_PLL_SET; pll_idx++)
+		{
+			freq = GetPllIdx2Freq(pll_idx);
+
+			// seq2. set(change) pll to each chip
+			SetPllFreq(handle, freq);
+
+			// seq3. read the temperature
+			temperature = get_temp(get_mvolt(adcCh));
+			if (temperature > TEMPERATURE_THREASHOLD) {
+				memset(reason, 0, sizeof(char)*512);
+				snprintf(reason, sizeof(reason), "test stopped due to high temperature: %.3f\n", temperature);
+				goto failure;
+			}
+
+			// seq4. run BIST
+			RunBist(handle);
+
+			// seq6. report result (pll freq, temperature, number of cores)
+			reportBistResult(freq, temperature, handle);
+		}
 	}
 
 	// seq7. report with the reason and exit
@@ -803,11 +827,18 @@ void ScenarioTestLoop(void)
 		}
 		else if( !strcasecmp(cmd[0], "3") )
 		{
+			int pll_freq = 0;
+			if (cmdCnt > 1) {
+				pll_freq = strtol(cmd[1], 0, 10);
+				if (pll_freq > 1000) {
+					pll_freq = 1000;
+				}
+			}
+			printf("pll_freq = %d\n", pll_freq);
 			// prepare bist log file
 			init_log_file(0);
-			ChipSortingBIST();
+			ChipSortingBIST(pll_freq);
 			fclose(bist_log);
-			break;
 		}
 	}
 
