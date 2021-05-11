@@ -319,7 +319,7 @@ int Btc08AutoAddress (BTC08_HANDLE handle)
 	}
 
 	rx = handle->rxBuf + txLen;
-	// rx[0]
+	// rx[0] : 0x01
 	// rx[1] : number of chips
 
 	return rx[1];
