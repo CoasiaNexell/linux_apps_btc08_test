@@ -113,16 +113,6 @@ static void SetPll(BTC08_HANDLE handle, int chipId, int pll_idx)
 	NxDbgMsg(NX_DBG_ERR, "%5s [chip#%d] pll lock status: %s\n", "", chipId, (lock_status == 1) ? "locked":"unlocked");
 }
 
-/* 0x12345678 --> 0x56781234*/
-static inline void swap16_(void *dest_p, const void *src_p)
-{
-	uint32_t *dest = dest_p;
-	const uint32_t *src = src_p;
-
-	*dest =     ((*src & 0xFF) << 16) |     ((*src & 0xFF00) << 16) |
-			((*src & 0xFF0000) >> 16) | ((*src & 0xFF000000) >> 16);
-}
-
 static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 {
 	int ret = 0, result = 0;
@@ -489,7 +479,7 @@ static void TestWork(uint8_t last_chipId)
 	DestroyBtc08( handle );
 }
 
-/* Process 4 works with asicboost at first.
+/* Process the same works with asicboost. version mask is not supported.
  * If OON IRQ occurs, check READ_JOB_ID, clear OON and then pass the additional work to job fifo.
  * If GN IRQ occurs, read GN and then clear GN IRQ.
  * Test Results
@@ -838,7 +828,7 @@ static void TestInfiniteWorkLoop()
 						{
 							if((micro_job_id & (1<<i)) != 0)
 							{
-								memcpy(&data, &(vmask_001[(1<<i)]), 4);
+								memcpy(&data, &(data.vmask_001[(1<<i)]), 4);
 								if (!submit_nonce(&data, found_nonce[i])) {
 									NxDbgMsg(NX_DBG_ERR, "%5s Failed: invalid nonce 0x%08x\n", "", found_nonce[i]);
 									isErr = true;
@@ -989,7 +979,7 @@ static int handleGN2(BTC08_HANDLE handle, uint8_t chipId, VECTOR_DATA *data)
 	return (bHash&&bNonce) ? 0 : -1;
 }
 
-
+/* Useful for finding timestamps */
 static void TestWorkLoop_RandomVector()
 {
 	int ii;

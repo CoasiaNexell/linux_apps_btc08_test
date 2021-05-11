@@ -27,7 +27,9 @@ static void testfunction_command_list()
 	printf("\n\n");
 	printf("====== Test function =======\n");
 	printf("  1. Verify vector data \n");
+	printf("     ex> 1 0 (default:4, available:0~6) \n");
 	printf("  2. Verify vector data with vmask \n");
+	printf("     ex> 2 0 (default:4, available:0~6) \n");
 	printf("  3. Convert epoch time to human-readable date \n");
 	printf("     ex> 3 1614131870 (default:1614131870) \n");
 	printf("  4. Calculate target from sdiff (default:512.00)\n");
@@ -48,6 +50,9 @@ static int verify_hash(int idx)
 	uint32_t *p_nonce32;
 	uint32_t nonce32;
 	int ret = 0;
+
+	if (idx >= MAX_NUM_VECTOR)
+		idx = 0;
 
 	NxDbgMsg(NX_DBG_INFO, "verify vector(index #%d)\n", idx);
 
@@ -83,6 +88,9 @@ static int verify_hash_with_vmask(int idx)
 	char core[512];
 	int ret = 0;
 
+	if (idx >= MAX_NUM_VECTOR)
+		idx = 0;
+
 	NxDbgMsg(NX_DBG_INFO, "verify vector with vmask(index #%d)\n", idx);
 
 	GetGoldenVectorWithVMask(idx, &data, 0);
@@ -98,10 +106,10 @@ static int verify_hash_with_vmask(int idx)
 
 	for (int i=0; i<4; i++)
 	{
-		memcpy(&data, &(vmask_001[(1<<i)]), 4);
+		memcpy(&data, &(data.vmask_001[(1<<i)]), 4);
 
 		sprintf(core, "header for Inst_%s", (i==0) ?
-				"Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
+			"Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
 		HexDump(core, data.data, sizeof(data.data));
 
 		if (submit_nonce(&data, nonce32))
@@ -150,6 +158,21 @@ static double le256todouble(const void *target)
 	return dcut64;
 }
 
+void calc_btc08_target(uint8_t *dest_target, uint32_t nbits)
+{
+	uint32_t *nbits_ptr = (uint32_t *)dest_target;
+	*nbits_ptr = bswap_32(nbits);
+	HexDump("dest_target", dest_target, 4);
+
+	uint8_t select0, select1, shift = 0;
+	select0 = (dest_target[0] / 4) - 1;
+	select1 = (dest_target[0] % 4) + 1;
+	dest_target[4] = select0;
+	dest_target[5] = select1<<4 | (shift&0xF);
+
+	HexDump("select", dest_target+4, 2);
+}
+
 /* calculate Bits(4bytes) from Target(32bytes) */
 /* Bits(4bytes) in block header --> convert Bits to Target(32bytes) --> Difficulty
  *  difficulty: 1.000000 <--> target: 0000000000000000000000000000000000000000000000000000FFFF00000000
@@ -174,6 +197,23 @@ static uint32_t nbits_from_target(unsigned char *target)
 	return ret;
 }
 
+uint32_t get_diff(double diff)
+{
+	uint32_t n_bits;
+	int shift = 29;
+	double f = (double) 0x0000ffff / diff;
+	while (f < (double) 0x00008000) {
+		shift--;
+		f *= 256.0;
+	}
+	while (f >= (double) 0x00800000) {
+		shift++;
+		f /= 256.0;
+	}
+	n_bits = (int) f + (shift << 24);
+	return n_bits;
+}
+
 /* calculate difficulty from current_target(32bytes)
  * maximum_target(diff 1) : 0x00000000FFFF0000000000000000000000000000000000000000000000000000
  * Difficulty = maximum_target / current_target */
@@ -188,9 +228,24 @@ static double diff_from_target(void *target)
 	return d64 / dcut64;
 }
 
+void gen_real_target(const unsigned char *target)
+{
+	uint32_t *target32 = (uint32_t *)target;
+	unsigned char target_swap[32];
+	char *target_str;
+
+	for (int i = 28 / 4; i >= 0; i--) {
+		uint32_t t32tmp = le32toh(target32[i]);
+	}
+
+	swab256(target_swap, target);
+	target_str = bin2hex(target_swap, 32);
+	NxDbgMsg(NX_DBG_INFO, "Target: %s\n", target_str);
+}
+
 /* calculate target(32bytes) from sdiff
  * ex. diff 512.000000 --> target 00000000000000000000000000000000000000000000000080ff7f0000000000 */
-void target_from_diff(double diff)
+void target_from_diff(unsigned char *dest_target, double diff)
 {
 	unsigned char target[32];
 	uint64_t *data64, h64;
@@ -198,6 +253,7 @@ void target_from_diff(double diff)
 	uint32_t nbits;
 	double diff2;
 	char *htarget;
+	uint8_t btc08_target[6];
 
 	if (diff == 0.0) {
 		/* This shouldn't happen but best we check to prevent a crash */
@@ -241,12 +297,18 @@ void target_from_diff(double diff)
 	NxDbgMsg(NX_DBG_INFO, "Generated target %s from sdiff %lf\n", htarget, diff);
 	free(htarget);
 
+	memcpy(dest_target, target, 32);
+
+	gen_real_target(target);
+
 	diff2 = diff_from_target(target);
 	NxDbgMsg(NX_DBG_INFO, "%3s difficulty from target: %lf\n", "", diff2);
 
 	// calc nbits from target
 	nbits = nbits_from_target(target);
 	NxDbgMsg(NX_DBG_INFO, "%3s nbits from target: %04x\n", "", nbits);
+
+	calc_btc08_target(btc08_target, nbits);
 }
 
 void FuntionTestLoop(void)
@@ -309,26 +371,29 @@ void FuntionTestLoop(void)
 			// ex> diff: 8192.00, 1638.00, 512.00, etc
 			char *s_sdiff = "512.00";
 			double sdiff = 512.00;
+			unsigned char target[32];
 			if( cmdCnt > 1 )
 			{
 				sdiff = strtod(cmd[1], &s_sdiff);
 			}
 			NxDbgMsg(NX_DBG_INFO, "sdiff:%lf\n", sdiff);
-			target_from_diff(sdiff);
+			target_from_diff(target, sdiff);	// set_target
 		}
 		//----------------------------------------------------------------------
 		// Calculate current target from nbits
 		else if( !strcasecmp(cmd[0], "5") )
 		{
 			// genesis nbits: 0x1D00FFFF
-			uint8_t nbits[4] = {0x1D, 0x00, 0xFF, 0xFF};
+			// htarget: 00000000ffff0000000000000000000000000000000000000000000000000000
+			uint8_t nbits[4] = {0x17, 0x0B, 0xEF, 0x93};
+			uint32_t *nbits_32 = (uint32_t *)nbits;
 			uint8_t target[32] = {0x00,};
-			unsigned char *htarget;  // 00000000ffff0000000000000000000000000000000000000000000000000000
+			unsigned char *htarget;
 
 			target_from_nbits(nbits, target);
-
 			htarget = bin2hex(target, 32);
-			NxDbgMsg(NX_DBG_INFO, "nbits:0x%8x ==> htarget:%s\n", (uint32_t *)nbits, htarget);
+			HexDump("nbits", nbits, 4);
+			NxDbgMsg(NX_DBG_INFO, "htarget:%s\n", htarget);
 			free(htarget);
 		}
 	}
