@@ -20,6 +20,8 @@
 #ifndef _TEMPCTRL_H_
 #define _TEMPCTRL_H_
 
+#define TEMPERATURE_THREASHOLD	100.
+
 float get_mvolt( int ch );
 float get_temp( float mV );
 
