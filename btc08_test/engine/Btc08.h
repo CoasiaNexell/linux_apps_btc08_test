@@ -25,6 +25,7 @@
 #include <Spi.h>
 #include <stdbool.h>
 
+#include "PllCtrl.h"
 #include "TestVector.h"
 #define BCAST_CHIP_ID		0x00
 
@@ -125,5 +126,13 @@ int Btc08ReadRevision(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 int Btc08SetPllFoutEn(BTC08_HANDLE handle, uint8_t chipId, uint8_t fout);
 int Btc08SetPllResetB(BTC08_HANDLE handle, uint8_t chipId, uint8_t reset);
 int Btc08SetTmode    (BTC08_HANDLE handle, uint8_t chipId, uint8_t *tmode_sel);
+
+// PLL Seq APIs
+void SetPllConfigByIdx(BTC08_HANDLE handle, int chipId, int pll_idx);
+int  ReadPllLockStatus(BTC08_HANDLE handle, int chipId);
+int  SetPllFreq       (BTC08_HANDLE handle, int freq);
+
+void SetPllConfigByPass(BTC08_HANDLE handle, int chipId);
+int  SetPllFreqByPass  (BTC08_HANDLE handle);
 
 #endif // _BTC08_H_
