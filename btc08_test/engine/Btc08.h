@@ -25,6 +25,7 @@
 #include <Spi.h>
 #include <stdbool.h>
 
+#include "PllCtrl.h"
 #include "TestVector.h"
 #define BCAST_CHIP_ID		0x00
 
@@ -103,6 +104,7 @@ int Btc08RunBist     (BTC08_HANDLE handle, uint8_t *hash, uint8_t *hash2, uint8_
 uint8_t * Btc08ReadBist    (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08Reset       (BTC08_HANDLE handle);			//	S/W Reset
 int Btc08SetPllConfig(BTC08_HANDLE handle, uint8_t idx);
+int Btc08SetPllConfigByPass(BTC08_HANDLE handle, uint8_t idx);
 int Btc08ReadPll     (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08WriteParam  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *midState, uint8_t *param);
 int Btc08ReadParam   (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
@@ -125,5 +127,10 @@ int Btc08ReadRevision(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 int Btc08SetPllFoutEn(BTC08_HANDLE handle, uint8_t chipId, uint8_t fout);
 int Btc08SetPllResetB(BTC08_HANDLE handle, uint8_t chipId, uint8_t reset);
 int Btc08SetTmode    (BTC08_HANDLE handle, uint8_t chipId, uint8_t *tmode_sel);
+
+// PLL Seq APIs
+void SetPllConfigByIdx(BTC08_HANDLE handle, int chipId, int pll_idx);
+int  ReadPllLockStatus(BTC08_HANDLE handle, int chipId);
+int  SetPllFreq       (BTC08_HANDLE handle, int freq);
 
 #endif // _BTC08_H_

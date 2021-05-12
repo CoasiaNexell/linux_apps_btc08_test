@@ -737,18 +737,18 @@ static void dump_work(char* title, struct VECTOR_DATA *work)
 	midstate3      = bin2hex(work->midState+32+32+32,     32);
 	target         = bin2hex(work->target,        32);
 
-	NxDbgMsg(NX_DBG_INFO,  "================== %s ==================\n", title);
-	NxDbgMsg(NX_DBG_INFO, "header        : %s\n", header);
-	NxDbgMsg(NX_DBG_INFO, "prev_blockhash: %s\n", prev_blockhash);
-	NxDbgMsg(NX_DBG_INFO, "merkle_root   : %s\n", merkle_root);
-	NxDbgMsg(NX_DBG_INFO, "timestamp     : %s\n", timestamp);
-	NxDbgMsg(NX_DBG_INFO, "nbits         : %s\n", nbits);
+	NxDbgMsg(NX_DBG_DEBUG,  "================== %s ==================\n", title);
+	NxDbgMsg(NX_DBG_DEBUG, "header        : %s\n", header);
+	NxDbgMsg(NX_DBG_DEBUG, "prev_blockhash: %s\n", prev_blockhash);
+	NxDbgMsg(NX_DBG_DEBUG, "merkle_root   : %s\n", merkle_root);
+	NxDbgMsg(NX_DBG_DEBUG, "timestamp     : %s\n", timestamp);
+	NxDbgMsg(NX_DBG_DEBUG, "nbits         : %s\n", nbits);
 
-	NxDbgMsg(NX_DBG_INFO, "midstate      : %s\n", midstate);
-	NxDbgMsg(NX_DBG_INFO, "midstate1     : %s\n", midstate1);
-	NxDbgMsg(NX_DBG_INFO, "midstate2     : %s\n", midstate2);
-	NxDbgMsg(NX_DBG_INFO, "midstate3     : %s\n", midstate3);
-	NxDbgMsg(NX_DBG_INFO, "target        : %s\n", target);
+	NxDbgMsg(NX_DBG_DEBUG, "midstate      : %s\n", midstate);
+	NxDbgMsg(NX_DBG_DEBUG, "midstate1     : %s\n", midstate1);
+	NxDbgMsg(NX_DBG_DEBUG, "midstate2     : %s\n", midstate2);
+	NxDbgMsg(NX_DBG_DEBUG, "midstate3     : %s\n", midstate3);
+	NxDbgMsg(NX_DBG_DEBUG, "target        : %s\n", target);
 
 	free(header);
 	free(prev_blockhash);
@@ -760,7 +760,7 @@ static void dump_work(char* title, struct VECTOR_DATA *work)
 	free(midstate2);
 	free(midstate3);
 	free(target);
-	NxDbgMsg(NX_DBG_INFO, "=======================================================================\n");
+	NxDbgMsg(NX_DBG_DEBUG, "=======================================================================\n");
 }
 
 static void dump_work_list(BTC08_HANDLE handle)
