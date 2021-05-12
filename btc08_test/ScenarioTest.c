@@ -30,6 +30,7 @@ static void simplework_command_list()
 	printf("\n\n");
 	printf("========== Scenario =========\n");
 	printf("  1. Start Mining\n");
+	printf("  ex> 1 90 400 (default:temp=100,freq=300)\n");
 	printf("  2. Stop Mining\n");
 	printf("  3. Bist with the pll freq\n");
 	printf("  ex> 3 400 (default:300~1000MHz)\n");
@@ -193,49 +194,6 @@ static void RunBist( BTC08_HANDLE handle )
 		handle->numCores[chipId-1] = ret[1];
 		NxDbgMsg(NX_DBG_DEBUG, "%5s [chip#%d] status: %s, total cores: %d\n",
 					"", chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1]);
-	}
-}
-
-static void SetPllConfigByIdx(BTC08_HANDLE handle, int chipId, int pll_idx)
-{
-	// seq1. Disable FOUT
-	Btc08SetPllFoutEn(handle, chipId, FOUT_EN_DISABLE);
-
-	// seq2. Down reset
-	Btc08SetPllResetB(handle, chipId, RESETB_RESET);
-
-	// seq3. Set PLL(change PMS value)
-	Btc08SetPllConfig(handle, pll_idx);
-
-	// seq4. wait for 1 ms
-	usleep(1000);
-
-	// seq5. Enable FOUT
-	Btc08SetPllFoutEn(handle, chipId, FOUT_EN_ENABLE);
-}
-
-static int ReadPllLockStatus(BTC08_HANDLE handle, int chipId)
-{
-	int lock_status;
-	uint8_t res[4] = {0x00,};
-	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-
-	lock_status = Btc08ReadPll(handle, chipId, res, res_size);
-	NxDbgMsg(NX_DBG_DEBUG, "%5s chip#%d is %s\n", "", chipId,
-			(lock_status == STATUS_LOCKED)?"locked":"unlocked");
-
-	return lock_status;
-}
-
-static void SetPllFreq(BTC08_HANDLE handle, int freq)
-{
-	int pll_idx = 0;
-
-	pll_idx = GetPllFreq2Idx(freq);
-	for (int chipId = 1; chipId <= handle->numChips; chipId++)
-	{
-		SetPllConfigByIdx(handle, chipId, pll_idx);
-		ReadPllLockStatus(handle, chipId);
 	}
 }
 
@@ -551,7 +509,7 @@ failure:
 /* Monitor Loop */
 void *MonitorLoop( void *arg )
 {
-	int adcCh = 1;
+	int adcCh = 0;
 	float mv;
 	char reason[1024];
 	SERVICE_INFO *hService = (SERVICE_INFO*)arg;
@@ -657,7 +615,7 @@ static void ChipSortingBIST(int pll_freq)
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-	int adcCh = 1;
+	int adcCh = 0;
 	int freq = 0;
 	float temperature;
 	int active_chips = 0;

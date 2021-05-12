@@ -9,6 +9,13 @@
 #include "Utils.h"
 #include "TestVector.h"
 
+#ifdef NX_DTAG
+#undef NX_DTAG
+#endif
+#define NX_DTAG "[TestVector]"
+#include "NX_DbgMsg.h"
+
+
 /* GOLDEN_MIDSTATE */
 uint8_t default_golden_midstate[32*4] = {
 	0x5f, 0x4d, 0x60, 0xa2, 0x53, 0x85, 0xc4, 0x07,
@@ -512,9 +519,9 @@ static void DumpData( const char *name, void *data, int size )
 	printf("%s(%d) : ", name, size);
 	for( int i=0 ; i < size ; i++ )
 	{
-		printf("%02x", buf[i]);
+		NxDbgMsg(NX_DBG_DEBUG, "%02x", buf[i]);
 	}
-	printf("\n");
+	NxDbgMsg(NX_DBG_DEBUG, "\n");
 }
 
 static void DumpGoldenVector( BLOCk_DATA_INFO *golden )
@@ -808,13 +815,13 @@ void GetGoldenVector( int idx, VECTOR_DATA *data, int enMidRandom )
 	data->endNonce[2] = 0xff;
 	data->endNonce[3] = 0xff;
 
-	printf("=======================================\n");
-	printf("Input Vector (%d):\n", idx);
+	NxDbgMsg(NX_DBG_DEBUG, "=======================================\n");
+	NxDbgMsg(NX_DBG_DEBUG, "Input Vector (%d):\n", idx);
 	DumpGoldenVector(&gstGoldenData[idx]);
-	printf("=======================================\n");
-	printf("Input Prameter : Golden Midstate = %d\n", golenMidstate);
+	NxDbgMsg(NX_DBG_DEBUG, "=======================================\n");
+	NxDbgMsg(NX_DBG_DEBUG, "Input Prameter : Golden Midstate = %d\n", golenMidstate);
 	DumpVectorData(data);
-	printf("=======================================\n");
+	NxDbgMsg(NX_DBG_DEBUG, "=======================================\n");
 }
 
 bool fulltest(const unsigned char *hash, const unsigned char *target)
