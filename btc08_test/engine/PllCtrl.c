@@ -95,11 +95,11 @@ void DumpPllValue(uint8_t val[4])
 	F_SEL   = (val[0] & 0x10)>>4;
 
 	NxDbgMsg(NX_DBG_DEBUG, "================== 0x%02x 0x%02x 0x%02x 0x%02x\n", val[0], val[1], val[2], val[3]);
-	NxDbgMsg(NX_DBG_DEBUG, "P       = %x(%d) \n", P, P );
-	NxDbgMsg(NX_DBG_DEBUG, "M       = %x(%d) \n", M, M );
-	NxDbgMsg(NX_DBG_DEBUG, "S       = %x(%d) \n", S, S );
-	NxDbgMsg(NX_DBG_DEBUG, "BYPASS  = %x \n", BYPASS  );
-	NxDbgMsg(NX_DBG_DEBUG, "DIV_SEL = %x \n", DIV_SEL );
+	NxDbgMsg(NX_DBG_INFO, "P       = %x(%d) \n", P, P );
+	NxDbgMsg(NX_DBG_INFO, "M       = %x(%d) \n", M, M );
+	NxDbgMsg(NX_DBG_INFO, "S       = %x(%d) \n", S, S );
+	NxDbgMsg(NX_DBG_INFO, "BYPASS  = %x \n", BYPASS  );
+	NxDbgMsg(NX_DBG_INFO, "DIV_SEL = %x \n", DIV_SEL );
 	NxDbgMsg(NX_DBG_DEBUG, "AFC_ENB = %x \n", AFC_ENB );
 	NxDbgMsg(NX_DBG_DEBUG, "EXTAFC  = %x \n", EXTAFC  );
 	NxDbgMsg(NX_DBG_DEBUG, "FEED_EN = %x \n", FEED_EN );

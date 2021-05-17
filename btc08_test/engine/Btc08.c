@@ -287,11 +287,11 @@ int Btc08AutoAddress (BTC08_HANDLE handle)
 	return rx[1];
 }
 
-int Btc08RunBist(BTC08_HANDLE handle, uint8_t *hash, uint8_t *hash2, uint8_t *hash3, uint8_t *hash4)
+int Btc08RunBist(BTC08_HANDLE handle, uint8_t chipId, uint8_t *hash, uint8_t *hash2, uint8_t *hash3, uint8_t *hash4)
 {
 	int txLen = 0;
 	handle->txBuf[0] = SPI_CMD_RUN_BIST;
-	handle->txBuf[1] = 0x00;
+	handle->txBuf[1] = chipId;
 
 	txLen += 2;
 	memcpy(handle->txBuf+txLen, hash , HASH_LEN);	txLen += HASH_LEN;
@@ -759,17 +759,21 @@ int Btc08SetControl  (BTC08_HANDLE handle, uint8_t chipId, uint32_t param )
 	handle->txBuf[4] = (uint8_t)((param>> 8)&0xff);
 	handle->txBuf[5] = (uint8_t)((param>> 0)&0xff);
 
-#if DEBUG_RESULT
-	if (handle->txBuf[4] & LAST_CHIP_FLAG)
+#if DEBUG
+	NxDbgMsg(NX_DBG_INFO, "[SET_CONTROL] ");
+	for (int i=0; i<4; i++)
 	{
+		NxDbgMsg(NX_DBG_INFO, "handle->txBuf[%d]=0x%02x ", (i+2), handle->txBuf[i+2]);
+	}
+	NxDbgMsg(NX_DBG_INFO, "\n");
+
+	if (handle->txBuf[4] & LAST_CHIP_FLAG) {
 		NxDbgMsg(NX_DBG_INFO, " ==> Set a last chip (chip_id %d)\n", chipId);
 	}
-	if (handle->txBuf[5] & OON_IRQ_ENB)
-	{
+	if (handle->txBuf[5] & OON_IRQ_ENB) {
 		NxDbgMsg(NX_DBG_INFO, " ==> Set OON IRQ Enable\n");
 	}
 #endif
-
 	_WriteDummy(handle, 6);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2+4, DUMMY_BYTES ) )
 	{
@@ -961,12 +965,6 @@ int Btc08ReadFeature (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 	uint8_t *rx;
 	size_t txLen = 2;
 
-	if (BCAST_CHIP_ID == chipId)
-	{
-		NxDbgMsg(NX_DBG_ERR, "[%s] failed, wrong chip id\n", __FUNCTION__);
-		return -1;
-	}
-
 	handle->txBuf[0] = SPI_CMD_READ_FEATURE;
 	handle->txBuf[1] = chipId;
 
@@ -995,12 +993,6 @@ int Btc08ReadRevision(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 {
 	uint8_t *rx;
 	size_t txLen = 2;
-
-	if (BCAST_CHIP_ID == chipId)
-	{
-		NxDbgMsg(NX_DBG_ERR, "[%s] failed, wrong chip id\n", __FUNCTION__);
-		return -1;
-	}
 
 	handle->txBuf[0] = SPI_CMD_READ_REVISION;
 	handle->txBuf[1] = chipId;
