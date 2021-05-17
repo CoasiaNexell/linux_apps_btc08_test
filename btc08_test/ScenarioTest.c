@@ -173,7 +173,7 @@ static void RunBist( BTC08_HANDLE handle )
 
 	// Set the golden nonce instead of the nonce range
 	Btc08WriteNonce (handle, BCAST_CHIP_ID, golden_nonce, golden_nonce);
-	Btc08RunBist    (handle, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
+	Btc08RunBist    (handle, BCAST_CHIP_ID, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
 
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
