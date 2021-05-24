@@ -860,7 +860,7 @@ int Btc08ReadDebugCnt(BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 	uint32_t *p1 = (uint32_t *)&(rx[0]);
 	debugcnt = *p1;
 	debugcnt = bswap_32(debugcnt);
-	NxDbgMsg(NX_DBG_ERR, " rx[0]=0x%02x, rx[1]=0x%02x, rx[2]=0x%02x, rx[3]=0x%02x debugcnt:%u(0x%08x)<==\n",
+	NxDbgMsg(NX_DBG_INFO, "rx[0]=0x%02x, rx[1]=0x%02x, rx[2]=0x%02x, rx[3]=0x%02x, debugcnt:%u(0x%08x)\n",
 				rx[0], rx[1], rx[2], rx[3], debugcnt, debugcnt);
 
 	memcpy(res, rx, res_size);
@@ -1118,10 +1118,10 @@ int SetPllFreq(BTC08_HANDLE handle, int freq)
 
 	pll_idx = GetPllFreq2Idx(freq);
 	if (pll_idx < 0) {
-		NxDbgMsg(NX_DBG_ERR, "Failed to set the correct PLL Freq!!!\n");
+		NxDbgMsg(NX_DBG_ERR, "Failed due to unknown PLL Freq(%d)!!!\n", freq);
 		return -1;
 	} else {
-		NxDbgMsg(NX_DBG_INFO, "pll_idx:%d\n", pll_idx);
+		NxDbgMsg(NX_DBG_INFO, "pll_idx:%d freq:%d\n", pll_idx, freq);
 	}
 
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
