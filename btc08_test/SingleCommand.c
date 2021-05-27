@@ -26,7 +26,7 @@ static void singlecommand_command_list()
 	printf("  4. Set the chip to the last chip\n");
 	printf("    ex > 4 [chipId]\n");
 	printf("  5. Disable core\n");
-	printf("    ex > 5 [disable_core_num] [freq]\n");
+	printf("    ex > 5 [disable_core_num] [freq] [isfullnonce] (bypass:freq 24MHz)\n");
 	printf("  6. Write, Read Target\n");
 	printf("  7. Set, Read disable\n");
 	printf("  8. Read Revision\n");
@@ -167,42 +167,30 @@ void ReadBist(BTC08_HANDLE handle)
 	}
 }
 
-void ReadId(BTC08_HANDLE handle)
+static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 {
+	int chipId = 0x00, jobId = 0x01;
+	uint8_t oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id = 0x00;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-
-	for (int chipId = 1; chipId <= handle->numChips; chipId++)
-	{
-		Btc08ReadId(handle, chipId, res, res_size);
-		NxDbgMsg( NX_DBG_INFO, "[READ_ID] ChipId = %d, NumJobs = %d\n",
-					chipId, (res[2]&7) );
-	}
-}
-
-static void RunJob(BTC08_HANDLE handle)
-{
-	int chipId = 0x00, jobId=0x01;
-	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id = 0x00;
-	uint8_t res[4] = {0x00,};
-	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-	uint8_t oon_jobid, gn_jobid;
 	struct timespec ts_start, ts_oon, ts_gn, ts_diff, ts_last_oon;
-	uint64_t jobcnt = 0;
-	uint64_t hashes_done;
 	bool	ishashdone = false;
 	uint64_t startTime, currTime, deltaTime, prevTime;
 	uint64_t totalProcessedHash = 0;
 	double totalTime;
 	double megaHash;
-	//uint8_t start_nonce[4] = { 0x66, 0x00, 0x00, 0x00 };
-	//uint8_t end_nonce[4]   = { 0x77, 0x00, 0x00, 0x00 };
 	int numWorks = 4;
-
-	uint8_t start_nonce[4] = { 0x00, 0x00, 0x00, 0x00 };
-	uint8_t end_nonce[4]   = { 0xff, 0xff, 0xff, 0xff };
+	int gn_cnt = 0, oon_cnt = 0;
+	uint8_t start_nonce[4], end_nonce[4];
 
 	handle->isAsicBoost = true;
+	if (is_full_nonce) {
+		memcpy(start_nonce, start_full_nonce, sizeof(start_nonce)/sizeof(start_nonce[0]));
+		memcpy(  end_nonce,   end_full_nonce,    sizeof(end_nonce)/sizeof(end_nonce[0]));
+	} else {
+		memcpy(start_nonce, start_small_nonce, sizeof(start_nonce)/sizeof(start_nonce[0]));
+		memcpy(  end_nonce,   end_small_nonce,    sizeof(end_nonce)/sizeof(end_nonce[0]));
+	}
 
 	tstimer_time(&ts_start);
 	NxDbgMsg( NX_DBG_INFO, "[RUN JOB] [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
@@ -212,7 +200,6 @@ static void RunJob(BTC08_HANDLE handle)
 	for (int i=0; i<4; i++) {
 		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
 		Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
-		jobcnt++;
 		ReadId(handle);
 	}
 
@@ -229,6 +216,7 @@ static void RunJob(BTC08_HANDLE handle)
 			chipId     = res[3];
 
 			if (0 != gn_irq) {		// If GN IRQ is set, then handle GN
+				gn_cnt++;
 				tstimer_time(&ts_gn);
 				tstimer_diff(&ts_gn, &ts_start, &ts_diff);
 				NxDbgMsg(NX_DBG_INFO, "=== GN IRQ on chip#%d for jobId#%d!!! [%ld.%lds] ==> [%ld.%lds]\n",
@@ -255,17 +243,19 @@ static void RunJob(BTC08_HANDLE handle)
 			{
 				NxDbgMsg(NX_DBG_INFO, "*** OON IRQ on chip#%d for oon_job_id:%d!!! ***\n", chipId, oon_job_id);
 				handleOON(handle, BCAST_CHIP_ID);
+				oon_cnt++;
 
-				if (handle->isAsicBoost)
-				{
-					totalProcessedHash += (0x100000000 * 4);	//	0x100000000 * 4 (asic booster)
-					//totalProcessedHash += (0x11000000 * 4);	//	0x100000000 * 4 (asic booster)
+				if (is_full_nonce) {
+					if (handle->isAsicBoost)
+						totalProcessedHash += (0x100000000 * 4);	//	0x100000000 * 4 (asic booster)
+					else
+						totalProcessedHash += 0x100000000;			//	0x100000000 * 4
+				} else {
+					if (handle->isAsicBoost)
+						totalProcessedHash += (0x11000000 * 4);		//	0x100000000 * 4 (asic booster)
+					else
+						totalProcessedHash += 0x11000000;			//	0x100000000 * 4
 				}
-				else
-				{
-					totalProcessedHash += 0x100000000;			//	0x100000000 * 4
-					//totalProcessedHash += 0x11000000;			//	0x100000000 * 4
-				}		
 
 				currTime = get_current_ms();
 				totalTime = currTime - startTime;
@@ -276,7 +266,7 @@ static void RunJob(BTC08_HANDLE handle)
 
 				prevTime = currTime;
 
-				if (oon_job_id == numWorks)
+				if (oon_cnt == numWorks)
 					ishashdone = true;
 				/*Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
 				if (jobId == 256)
@@ -292,7 +282,7 @@ static void RunJob(BTC08_HANDLE handle)
 		sched_yield();
 	}
 
-	if (oon_job_id != numWorks)
+	if ((oon_cnt != numWorks) || (gn_cnt != numWorks))
 		NxDbgMsg(NX_DBG_INFO, "=== Test Failed!!!");
 	else
 		NxDbgMsg(NX_DBG_INFO, "=== Test Succeed!!!");
@@ -304,10 +294,8 @@ static void Run1Job(BTC08_HANDLE handle)
 	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id = 0x00;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-	uint8_t oon_jobid, gn_jobid;
 	struct timespec ts_start, ts_oon, ts_gn, ts_diff, ts_last_oon;
 	uint64_t jobcnt = 0;
-	uint64_t hashes_done;
 	bool	ishashdone = false;
 	uint64_t startTime, currTime, deltaTime, prevTime;
 	uint64_t totalProcessedHash = 0;
@@ -453,7 +441,7 @@ void TestLastChip( BTC08_HANDLE handle, uint8_t last_chipId )
 	ReadId(handle);
 }
 
-/* tb.1core.vinc
+/* Disable core
  * seq1. AUTO_ADDRESS > READ_ID
  * seq2. Set PLL
  * seq3. SET_CONTROL (OON_ENB|UART_DIVIDER) ex. 32'h00000018
@@ -467,14 +455,12 @@ void TestLastChip( BTC08_HANDLE handle, uint8_t last_chipId )
  * 			    if (gn_flag)		 { READ_HASH > READ_RESULT > READ_ID }
  *       }
 */
-/* Disable core */
-void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num, uint32_t pll_freq )
+void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num, uint32_t pll_freq, uint8_t is_full_nonce )
 {
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 	uint8_t disable_cores[32] = {0x00,};
-	uint8_t last_chip_id = 1;
 
 	// Disable cores
 	if( disable_core_num > 0 )
@@ -499,40 +485,10 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num, uint32_t pl
 	NxDbgMsg(NX_DBG_INFO, "[AUTO_ADDRESS] NumChips = %d\n", handle->numChips);
 	ReadId(handle);
 
-	NxDbgMsg( NX_DBG_INFO, "[RESET]\n");
-	Btc08Reset(handle);
-
-	// seq2. SET_CONTROL (OON_ENB|UART_DIVIDER)
-	if (last_chip_id != 0)
-	{
-		NxDbgMsg( NX_DBG_INFO, "[SET_CONTROL] 0x%02x for chip%d\n",
-			(LAST_CHIP | UART_DIVIDER), last_chip_id);
-		Btc08SetControl(handle, last_chip_id, (LAST_CHIP | UART_DIVIDER));
-	}
-
-	// SET_DISABLE - enable all cores
-	NxDbgMsg(NX_DBG_INFO, "[SET_DISABLE] Enable all cores ==\n");
-	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
-
-	// WRITE_PARAM, WRITE_NONCE, WRITE_TARGET
-	NxDbgMsg(NX_DBG_INFO, "[WRITE_PARAM, WRITE_NONCE, WRITE_TARGET]\n");
-	Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
-	Btc08WriteNonce (handle, BCAST_CHIP_ID, golden_nonce, golden_nonce);
-	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
-
-	// RUN_BIST
-	NxDbgMsg(NX_DBG_INFO, "[RUN_BIST]\n");
-	Btc08RunBist(handle, BCAST_CHIP_ID, default_golden_hash, default_golden_hash,
-				default_golden_hash, default_golden_hash);
-	ReadBist(handle);
-
+	// seq2. Set PLL
 	NxDbgMsg(NX_DBG_INFO, "[SET_PLL] Set PLL %d\n", pll_freq);
-	// seq3. Set PLL
 	if (0 > SetPllFreq(handle, pll_freq))
 		return;
-
-	NxDbgMsg( NX_DBG_INFO, "[RESET]\n");
-	Btc08Reset(handle);
 
 	// seq4. WRITE_PARAM, WRITE_NONCE, WRITE_TARGET
 	NxDbgMsg(NX_DBG_INFO, "[WRITE_PARAM, WRITE_NONCE, WRITE_TARGET]\n");
@@ -545,28 +501,17 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num, uint32_t pl
 	for (int i=0; i<handle->numChips; i++) {
 		Btc08SetDisable (handle, i, disable_cores);
 	}
+
 	// seq6. RUN_BIST > READ_BIST
 	NxDbgMsg(NX_DBG_INFO, "[RUN_BIST]\n");
 	Btc08RunBist(handle, BCAST_CHIP_ID, default_golden_hash, default_golden_hash,
 				default_golden_hash, default_golden_hash);
 	ReadBist(handle);
 
-	// Enable OON irq
-	for(int chipId=1 ; chipId <= handle->numChips ; chipId++)
-	{
-		if( chipId == last_chip_id )
-		{
-			Btc08SetControl(handle, chipId, (LAST_CHIP | OON_IRQ_EN | UART_DIVIDER));
-			handle->numChips = Btc08AutoAddress(handle);
-			NxDbgMsg(NX_DBG_INFO, "[AUTO_ADDRESS] NumChips = %d\n", handle->numChips);
-			ReadId(handle);
-		}
-		else
-			Btc08SetControl(handle, chipId, (OON_IRQ_EN | UART_DIVIDER));
-	}
+	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
 
 	// seq7. WRITE_PARAM, WRITE_NONCE > RUN_JOB
-	RunJob(handle);
+	RunJob(handle, is_full_nonce);
 }
 
 void TestBist( BTC08_HANDLE handle, int pll_freq )
@@ -956,7 +901,20 @@ static int TestIOCtrl( BTC08_HANDLE handle )
 	return 0;
 }
 
-// tb.1core.vinc
+/* tb.1core.vinc
+ * seq1. AUTO_ADDRESS > READ_ID
+ * seq2. Set PLL
+ * seq3. SET_CONTROL (OON_ENB|UART_DIVIDER) ex. 32'h00000018
+ * seq4. WRITE_PARAM, WRITE_NONCE, WRITE_TARGET
+ * seq5. SET_DISABLE
+ * seq6. RUN_BIST > READ_BIST
+ * seq7. WRITE_PARAM, WRITE_NONCE > RUN_JOB
+ * seq8. loop {
+ * 		    wait until GN_IRQ==1
+ * 			    if (gn_chip_id != 0) { CLEAR_OON(BR) }
+ * 			    if (gn_flag)		 { READ_HASH > READ_RESULT > READ_ID }
+ *       }
+*/
 void TestXCore( BTC08_HANDLE handle, uint8_t disable_core_num )
 {
 	uint8_t *ret;
@@ -1198,18 +1156,22 @@ void SingleCommandLoop(void)
 		else if (!strcasecmp(cmd[0], "5") )
 		{
 			uint8_t disable_core_num = 0;
-			uint32_t pll_freq = 300;
+			uint32_t pll_freq = 50;
+			uint8_t is_full_nonce = 1;
 			if( cmdCnt > 1 )
 			{
 				disable_core_num = strtol(cmd[1], 0, 10);
 			}
 			if ( cmdCnt > 2 )
 			{
-				disable_core_num = strtol(cmd[1], 0, 10);
 				pll_freq = strtol(cmd[2], 0, 10);
 			}
-			printf("disable_core_num = %d, pll_freq = %d\n",  disable_core_num, pll_freq);
-			TestDisableCore( handle, disable_core_num, pll_freq );
+			if ( cmdCnt > 3 )
+			{
+				is_full_nonce = strtol(cmd[3], 0, 10);
+			}
+			printf("disable_core_num = %d, pll_freq = %d is_full_nonce = %d\n",  disable_core_num, pll_freq, is_full_nonce);
+			TestDisableCore( handle, disable_core_num, pll_freq, is_full_nonce );
 		}
 		//----------------------------------------------------------------------
 		//	Write/Read Target Test

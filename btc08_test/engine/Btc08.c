@@ -354,18 +354,18 @@ int Btc08Reset       (BTC08_HANDLE handle)
 }
 
 
-int Btc08SetPllConfig(BTC08_HANDLE handle, uint8_t idx)
+int Btc08SetPllConfig(BTC08_HANDLE handle, uint8_t chipId, uint8_t idx)
 {
 	size_t txLen = 6;
 	handle->txBuf[0] = SPI_CMD_SET_PLL_CONFIG;
-	handle->txBuf[1] = 0x00;
+	handle->txBuf[1] = chipId;
 	handle->txBuf[2] = (uint8_t)(pll_sets[idx].val>>24)&0xff;
 	handle->txBuf[3] = (uint8_t)(pll_sets[idx].val>>16)&0xff;
 	handle->txBuf[4] = (uint8_t)(pll_sets[idx].val>> 8)&0xff;
 	handle->txBuf[5] = (uint8_t)(pll_sets[idx].val>> 0)&0xff;
 
-	NxDbgMsg(NX_DBG_DEBUG, "Btc08SetPllConfig() 0x%02x 0x%02x 0x%02x 0x%02x\n",
-	 		handle->txBuf[2], handle->txBuf[3], handle->txBuf[4], handle->txBuf[5]);
+	NxDbgMsg(NX_DBG_DEBUG, "Btc08SetPllConfig() pll_sets[idx].freq:%d 0x%02x 0x%02x 0x%02x 0x%02x\n",
+			pll_sets[idx].freq, handle->txBuf[2], handle->txBuf[3], handle->txBuf[4], handle->txBuf[5]);
 	_WriteDummy(handle, 6);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DUMMY_BYTES ) )
 	{
@@ -1081,7 +1081,7 @@ void SetPllConfigByIdx(BTC08_HANDLE handle, int chipId, int pll_idx)
 	Btc08SetPllFoutEn(handle, chipId, FOUT_EN_DISABLE);
 
 	// seq3. Set PLL(change PMS value)
-	Btc08SetPllConfig(handle, pll_idx);
+	Btc08SetPllConfig(handle, chipId, pll_idx);
 
 	// seq2. Down reset
 	Btc08SetPllResetB(handle, chipId, RESETB_RESET);
@@ -1131,4 +1131,17 @@ int SetPllFreq(BTC08_HANDLE handle, int freq)
 	}
 
 	return 0;
+}
+
+void ReadId(BTC08_HANDLE handle)
+{
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	{
+		Btc08ReadId(handle, chipId, res, res_size);
+		NxDbgMsg( NX_DBG_INFO, "[READ_ID] ChipId = %d, NumJobs = %d\n",
+					chipId, (res[2]&7) );
+	}
 }
