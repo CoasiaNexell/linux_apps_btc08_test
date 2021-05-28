@@ -9,6 +9,12 @@
 
 #include "Utils.h"
 
+#ifdef NX_DTAG
+#undef NX_DTAG
+#endif
+#define NX_DTAG "[Utils]"
+#include "NX_DbgMsg.h"
+
 /* Timeval */
 // convert timespec to timeval
 void timespec_to_val(struct timeval *val, const struct timespec *spec)
@@ -137,7 +143,7 @@ void HexDump( const char *name, const void *data, int32_t size )
 	const uint8_t *_data = (const uint8_t*)data;
 
 	if( name )
-		printf("%s (%d): \n", name, size);
+		NxDbgMsg(NX_DBG_DEBUG, "%s (%d): \n", name, size);
 
 	while( offset < size )
 	{
@@ -180,7 +186,7 @@ void HexDump( const char *name, const void *data, int32_t size )
 			}
 		}
 		strcat(lineBuf, "\n");
-		printf( "%s", lineBuf );
+		NxDbgMsg(NX_DBG_DEBUG, "%s", lineBuf );
 		offset += 16;
 	}
 }

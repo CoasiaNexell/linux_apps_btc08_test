@@ -141,32 +141,6 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 	return ret;
 }
 
-void ReadBist(BTC08_HANDLE handle)
-{
-	uint8_t *ret;
-
-	for (int chipId = 1; chipId <= handle->numChips; chipId++)
-	{
-		// If it's not BUSY status, read the number of cores in next READ_BIST
-		for (int i=0; i<10; i++) {
-			ret = Btc08ReadBist(handle, chipId);
-			if ( (ret[0] & 1) == 0 )
-				break;
-			else
-				NxDbgMsg( NX_DBG_INFO, "[READ_BIST] ChipId = %d, Status = %s, NumCores = %d\n",
-						chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
-
-			usleep( 300 );
-		}
-
-		ret = Btc08ReadBist(handle, chipId);
-
-		handle->numCores[chipId] = ret[1];
-		NxDbgMsg( NX_DBG_INFO, "[READ_BIST] ChipId = %d, Status = %s, NumCores = %d\n",
-					chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
-	}
-}
-
 static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 {
 	int chipId = 0x00, jobId = 0x01;
@@ -191,16 +165,20 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 		memcpy(start_nonce, start_small_nonce, sizeof(start_nonce)/sizeof(start_nonce[0]));
 		memcpy(  end_nonce,   end_small_nonce,    sizeof(end_nonce)/sizeof(end_nonce[0]));
 	}
+	DistributionNonce(handle, start_nonce, end_nonce);
 
 	tstimer_time(&ts_start);
 	NxDbgMsg( NX_DBG_INFO, "[RUN JOB] [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
+
 	Btc08WriteParam(handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
-	Btc08WriteNonce(handle, BCAST_CHIP_ID, start_nonce, end_nonce);
-	for (int i=0; i<4; i++) {
+	for (int i=0; i<handle->numChips; i++)
+	{
+		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
+	}
+	for (int i=0; i<numWorks; i++) {
 		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
 		Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
-		ReadId(handle);
 	}
 
 	startTime = get_current_ms();
@@ -461,6 +439,8 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num, uint32_t pl
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 	uint8_t disable_cores[32] = {0x00,};
+	BOARD_TYPE type = BOARD_TYPE_ASIC;
+	uint8_t last_chip_id = 1;
 
 	// Disable cores
 	if( disable_core_num > 0 )
@@ -486,9 +466,14 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num, uint32_t pl
 	ReadId(handle);
 
 	// seq2. Set PLL
-	NxDbgMsg(NX_DBG_INFO, "[SET_PLL] Set PLL %d\n", pll_freq);
-	if (0 > SetPllFreq(handle, pll_freq))
-		return;
+	type = get_board_type(handle);
+	if (type == BOARD_TYPE_ASIC)
+	{
+		NxDbgMsg(NX_DBG_INFO, "[SET_PLL] Set PLL %d\n", pll_freq);
+		if (0 > SetPllFreq(handle, pll_freq))
+			return;
+	}
+
 
 	// seq4. WRITE_PARAM, WRITE_NONCE, WRITE_TARGET
 	NxDbgMsg(NX_DBG_INFO, "[WRITE_PARAM, WRITE_NONCE, WRITE_TARGET]\n");
@@ -519,8 +504,7 @@ void TestBist( BTC08_HANDLE handle, int pll_freq )
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-
-	//	create BTC08 instance into index 0. ( /dev/spidev0.0 )
+	BOARD_TYPE type = BOARD_TYPE_ASIC;
 
 	Btc08ResetHW( handle, 1 );
 	Btc08ResetHW( handle, 0 );
@@ -544,10 +528,14 @@ void TestBist( BTC08_HANDLE handle, int pll_freq )
 	// Enable all cores
 	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
 
-	NxDbgMsg( NX_DBG_INFO, "[SET_PLL] Set PLL %d\n", pll_freq);
-	// 6. Set PLL freq
-	if (0 > SetPllFreq(handle, pll_freq))
-		return;
+	// seq2. Set PLL
+	type = get_board_type(handle);
+	if (type == BOARD_TYPE_ASIC)
+	{
+		NxDbgMsg(NX_DBG_INFO, "[SET_PLL] Set PLL %d\n", pll_freq);
+		if (0 > SetPllFreq(handle, pll_freq))
+			return;
+	}
 
 	NxDbgMsg( NX_DBG_INFO, "[BIST] Run BIST\n");
 	// Write param for BIST
@@ -598,7 +586,7 @@ static int TestWRTarget( BTC08_HANDLE handle )
 		}
 	}
 
-	NxDbgMsg(NX_DBG_INFO, "[WRITE_TARGET(BR)] ==\n");
+	NxDbgMsg(NX_DBG_INFO, "[WRITE_TARGET(BR)]\n");
 	if (0 == Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target))
 	{
 		for (int chipId=1; chipId <= handle->numChips; chipId++)
@@ -690,14 +678,11 @@ static int TestWRDisable( BTC08_HANDLE handle )
 			Btc08WriteNonce (handle, BCAST_CHIP_ID, golden_nonce, golden_nonce);
 			Btc08RunBist    (handle, BCAST_CHIP_ID, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
 
-			// READ_BIST
-			ReadBist(handle);
-
 			// SET_DISABLE
 			Btc08ReadDisable(handle, chipId, res, 32);
 			if (0 != memcmp(test_data1[chipId-1], res, 32))
 			{
-				NxDbgMsg(NX_DBG_ERR, "=== Failed READ_DISABLE(chip#%d) ==\n", chipId);
+				NxDbgMsg(NX_DBG_ERR, "== Failed READ_DISABLE on chip%d\n", chipId);
 				HexDump("set_disable:", test_data1[chipId-1], 32);
 				sprintf(title, "chipId(%d) read_disable:", chipId);
 				HexDump(title, res, 32);
@@ -705,10 +690,12 @@ static int TestWRDisable( BTC08_HANDLE handle )
 			}
 		}
 		else {
-			NxDbgMsg(NX_DBG_ERR, "=== Failed SET_DISABLE(per Chip) due to spi err ==\n");
+			NxDbgMsg(NX_DBG_ERR, "Failed SET_DISABLE(per Chip) due to spi err\n");
 			return -1;
 		}
 	}
+	// READ_BIST
+	ReadBist(handle);
 
 	// SET_DISABLE (BR)
 	NxDbgMsg( NX_DBG_INFO, "=== SET_DISABLE(BR) ==\n");
@@ -723,9 +710,6 @@ static int TestWRDisable( BTC08_HANDLE handle )
 		// READ_BIST
 		for (int chipId = 1; chipId <= handle->numChips; chipId++)
 		{
-			// READ_BIST
-			ReadBist(handle);
-
 			// SET_DISABLE
 			Btc08ReadDisable(handle, chipId, res, 32);
 			if (0 != memcmp(enable_all, res, 32))
@@ -742,6 +726,8 @@ static int TestWRDisable( BTC08_HANDLE handle )
 		NxDbgMsg(NX_DBG_ERR, "=== Failed SET_DISABLE(BR) due to spi err ==\n");
 		return -1;
 	}
+	// READ_BIST
+	ReadBist(handle);
 
 	NxDbgMsg(NX_DBG_INFO, "=== Succeed SET/READ_DISABLE ==\n");
 
@@ -796,7 +782,8 @@ static int TestReadFeature( BTC08_HANDLE handle )
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 	// Fixed value: 0xB5B, FPGA/ASIC: 0x00/0x05, 0x00, Hash Depth: 0x88
-	uint8_t fixed_feature[4] = {0xB5, 0xB5, 0x00, 0x88};
+	uint8_t fpga_feature[4] = {0xB5, 0xB0, 0x00, 0x88};
+	uint8_t asic_feature[4] = {0xB5, 0xB5, 0x00, 0x88};
 
 	Btc08ResetHW( handle, 1 );
 	Btc08ResetHW( handle, 0 );
@@ -808,6 +795,12 @@ static int TestReadFeature( BTC08_HANDLE handle )
 	Btc08ReadFeature(handle, BCAST_CHIP_ID, res, res_size);
 	NxDbgMsg(NX_DBG_INFO, "[READ_FEATURE(BR)] (0x%02x 0x%02x 0x%02x 0x%02x) ==\n",
 			res[0], res[1], res[2], res[3]);
+	if (0 == memcmp(fpga_feature, res, 4))
+		NxDbgMsg(NX_DBG_INFO, "== Succeed READ_FEATURE: FPGA\n");
+	else if (0 == memcmp(asic_feature, res, 4))
+		NxDbgMsg(NX_DBG_INFO, "== Succeed READ_FEATURE: ASIC\n");
+	else
+		HexDump("Failed READ_FEATURE", res, 4);
 
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
@@ -816,21 +809,22 @@ static int TestReadFeature( BTC08_HANDLE handle )
 			NxDbgMsg(NX_DBG_INFO, "[READ_FEATURE(chip%d)] (0x%02x 0x%02x 0x%02x 0x%02x) ==\n",
 						chipId, res[0], res[1], res[2], res[3]);
 
-			if (0 != memcmp(fixed_feature, res, 4))
+			if (0 == memcmp(fpga_feature, res, 4))
+				NxDbgMsg(NX_DBG_INFO, "== Succeed READ_FEATURE: FPGA\n");
+			else if (0 == memcmp(asic_feature, res, 4))
+				NxDbgMsg(NX_DBG_INFO, "== Succeed READ_FEATURE: ASIC\n");
+			else
 			{
-				NxDbgMsg(NX_DBG_ERR, "=== Not matched feature ==\n");
-				HexDump("READ_FEATURE", res, 4);
-				HexDump("fixed_feature", fixed_feature, 4);
+				HexDump("Failed READ_FEATURE ", res, 4);
 				return -1;
 			}
 		}
 		else
 		{
-			NxDbgMsg(NX_DBG_ERR, "=== Failed READ_FEATURE due to spi err ==\n");
+			NxDbgMsg(NX_DBG_ERR, "Failed READ_FEATURE due to spi err ==\n");
 			return -1;
 		}
 	}
-	NxDbgMsg(NX_DBG_INFO, "=== Succeed READ_FEATURE ==\n");
 
 	return 0;
 }
@@ -922,6 +916,7 @@ void TestXCore( BTC08_HANDLE handle, uint8_t disable_core_num )
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 	uint8_t disable_cores[32] = {0x00,};
 	uint8_t last_chip_id = 1;
+	BOARD_TYPE type = BOARD_TYPE_ASIC;
 
 	Btc08ResetHW( handle, 1 );
 	Btc08ResetHW( handle, 0 );
@@ -951,9 +946,13 @@ void TestXCore( BTC08_HANDLE handle, uint8_t disable_core_num )
 	//----------------------------------------------------------------------
 	//  PLL
 	//----------------------------------------------------------------------
-	NxDbgMsg(NX_DBG_INFO, "pll_freq:100\n");
-	if (0 > SetPllFreq(handle, 300))
-		return;
+	type = get_board_type(handle);
+	if (type == BOARD_TYPE_ASIC)
+	{
+		NxDbgMsg(NX_DBG_INFO, "[SET_PLL] Set PLL 300\n");
+		if (0 > SetPllFreq(handle, 300))
+			return;
+	}
 
 	Btc08SetControl(handle, BCAST_CHIP_ID, 24/*0x0000_0018*/);
 
@@ -1018,6 +1017,13 @@ void TestReadId( BTC08_HANDLE handle )
 
 void TestReadPll( BTC08_HANDLE handle )
 {
+	BOARD_TYPE type = get_board_type(handle);
+	if (type == BOARD_TYPE_FPGA)
+	{
+		NxDbgMsg(NX_DBG_WARN, "Do not set pll on FPGA\n");
+		return;
+	}
+
 	NxDbgMsg(NX_DBG_INFO, "NumChips:%d\n", handle->numChips);
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
@@ -1032,7 +1038,11 @@ void TestReadBist( BTC08_HANDLE handle )
 
 void TestSetPll( BTC08_HANDLE handle, int pll_freq )
 {
-	SetPllFreq(handle, pll_freq);
+	BOARD_TYPE type = get_board_type(handle);
+	if (type == BOARD_TYPE_ASIC)
+		SetPllFreq(handle, pll_freq);
+	else
+		NxDbgMsg(NX_DBG_WARN, "Do not set pll on FPGA\n");
 }
 
 void DumpReadJobId(uint8_t chipId, uint8_t res[4])
@@ -1092,6 +1102,18 @@ void TestReadDebugCnt( BTC08_HANDLE handle )
 	{
 		Btc08ReadDebugCnt(handle, chipId, res, res_size);
 	}
+}
+
+static int TestResetGpio( BTC08_HANDLE handle, uint8_t val )
+{
+	if ((val != 0) && (val != 1)) {
+		NxDbgMsg(NX_DBG_ERR, "Enter 0/1\n");	
+	}
+
+	Btc08ResetHW(handle, val);
+	
+	NxDbgMsg(NX_DBG_INFO, "Set Reset GPIO (%d)\n", Btc08GpioGetValue(handle, GPIO_TYPE_RESET));
+	return 0;
 }
 
 void SingleCommandLoop(void)
@@ -1156,7 +1178,7 @@ void SingleCommandLoop(void)
 		else if (!strcasecmp(cmd[0], "5") )
 		{
 			uint8_t disable_core_num = 0;
-			uint32_t pll_freq = 50;
+			uint32_t pll_freq = 300;
 			uint8_t is_full_nonce = 1;
 			if( cmdCnt > 1 )
 			{
@@ -1261,6 +1283,16 @@ void SingleCommandLoop(void)
 		else if ( !strcasecmp(cmd[0], "18") )
 		{
 			TestReadDebugCnt(handle);
+		}
+		//----------------------------------------------------------------------
+		//	Set Reset GPIO val Test
+		else if( !strcasecmp(cmd[0], "19") )
+		{
+			int val = 0;
+			if ( cmdCnt > 1 )
+				val = strtol(cmd[1], 0, 10);
+			printf("val = %d\n", val);
+			TestResetGpio( handle, val );
 		}
 	}
 

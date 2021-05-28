@@ -30,10 +30,10 @@ static void simplework_command_list()
 	printf("\n\n");
 	printf("========== Scenario =========\n");
 	printf("  1. Start Mining\n");
-	printf("  ex> 1 90 400 (default:temp=100,freq=300)\n");
+	printf("  ex> 1 90 400 0 (default:temp=100,freq=300,disabled_core_num:0)\n");
 	printf("  2. Stop Mining\n");
 	printf("  3. Bist with the pll freq\n");
-	printf("  ex> 3 400 (default:300~1000MHz)\n");
+	printf("  ex> 3 400 (default:24,50~1000MHz)\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -78,6 +78,8 @@ typedef struct SEVICE_INFO {
 	int 			bTempAlert;
 	float 			tempAlertValue;		//	reference temporature value for alert
 	float 			currentTemp;
+
+	uint8_t			disable_core_num;
 
 	//	BTC08 Handle
 	BTC08_HANDLE 	hBtc08;
@@ -160,97 +162,40 @@ static void reportExitReason(const char *reason, FILE *logfile)
 		NxDbgMsg(NX_DBG_ERR, "ExitReason fwrite error");
 }
 
-static void RunBist( BTC08_HANDLE handle )
-{
-	uint8_t *ret;
-	uint8_t res[4] = {0x00,};
-	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-
-	NxDbgMsg(NX_DBG_INFO, "=== RUN BIST ==\n");
-
-	Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
-	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
-
-	// Set the golden nonce instead of the nonce range
-	Btc08WriteNonce (handle, BCAST_CHIP_ID, golden_nonce, golden_nonce);
-	Btc08RunBist    (handle, BCAST_CHIP_ID, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
-
-	for (int chipId = 1; chipId <= handle->numChips; chipId++)
-	{
-		// If it's not BUSY status, read the number of cores in next READ_BIST
-		for (int i=0; i<10; i++)
-		{
-			ret = Btc08ReadBist(handle, chipId);
-			if ( (ret[0] & 1) == 0 )
-				break;
-			else
-				NxDbgMsg(NX_DBG_DEBUG, "%5s [chip#%d] status: %s, total cores: %d\n",
-						"", chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1]);
-
-			usleep( 300 );
-		}
-
-		ret = Btc08ReadBist(handle, chipId);
-		handle->numCores[chipId-1] = ret[1];
-		NxDbgMsg(NX_DBG_DEBUG, "%5s [chip#%d] status: %s, total cores: %d\n",
-					"", chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1]);
-	}
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 //                              Mining Block                                  //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
-static void DistributionNonce( BTC08_HANDLE handle )
-{
-	int ii;
-	uint32_t totalCores = 0;
-	uint32_t noncePerCore;
-	uint32_t startNonce, endNonce;
-
-	for( int i=0 ; i<handle->numChips ; i++ )
-	{
-		totalCores += handle->numCores[i];
-	}
-	NxDbgMsg( NX_DBG_INFO, "Total Cores = %d\n", totalCores );
-
-	noncePerCore = 0xffffffff / totalCores;
-	startNonce = 0;
-	for( ii=0 ; ii<handle->numChips-1 ; ii++ ) {
-		endNonce = startNonce + (noncePerCore*handle->numCores[ii]);
-		{
-			handle->startNonce[ii][0] = (startNonce>>24) & 0xff;
-			handle->startNonce[ii][1] = (startNonce>>16) & 0xff;
-			handle->startNonce[ii][2] = (startNonce>>8 ) & 0xff;
-			handle->startNonce[ii][3] = (startNonce>>0 ) & 0xff;
-			handle->endNonce[ii][0]   = (endNonce>>24) & 0xff;
-			handle->endNonce[ii][1]   = (endNonce>>16) & 0xff;
-			handle->endNonce[ii][2]   = (endNonce>>8 ) & 0xff;
-			handle->endNonce[ii][3]   = (endNonce>>0 ) & 0xff;
-		}
-		startNonce = endNonce + 1;
-	}
-	handle->startNonce[ii][0] = (startNonce>>24) & 0xff;
-	handle->startNonce[ii][1] = (startNonce>>16) & 0xff;
-	handle->startNonce[ii][2] = (startNonce>>8 ) & 0xff;
-	handle->startNonce[ii][3] = (startNonce>>0 ) & 0xff;
-	handle->endNonce[ii][0] = 0xff;
-	handle->endNonce[ii][1] = 0xff;
-	handle->endNonce[ii][2] = 0xff;
-	handle->endNonce[ii][3] = 0xff;
-}
-
 /* Set pll frequency > BIST > Enable OON IRQ & Set UART DIVIDER > Nonce Distribution */
 static int InitializeMiningkLoop( SERVICE_INFO *hService )
 {
 	BTC08_HANDLE handle;
+	BOARD_TYPE type = BOARD_TYPE_ASIC;
+	int last_chip_id = 0;
+	uint8_t disable_cores[32] = {0x00,};
 
 	hService->hBtc08 = CreateBtc08(0);
 	if (hService->hBtc08 == NULL)
 		return -1;
 
 	handle = hService->hBtc08;
+
+	// Disable cores
+	if( hService->disable_core_num > 0 )
+	{
+		memset(disable_cores, 0xff, 32);
+		disable_cores[31] &= ~(1);
+		for (int i=1; i<(MAX_CORES-hService->disable_core_num); i++) {
+			disable_cores[31-(i/8)] &= ~(1 << (i % 8));
+		}
+		printf("#### disable_cores:%d\n", hService->disable_core_num);
+	}
+	else
+	{
+		memset(disable_cores, 0x00, 32);
+	}
+	HexDump("[disable_cores]", disable_cores, 32);
 
 	//	1. Reset
 	Btc08ResetHW(handle, 1);
@@ -263,14 +208,26 @@ static int InitializeMiningkLoop( SERVICE_INFO *hService )
 	Btc08Reset(handle);
 
 	// 4. Set last chip
-	Btc08SetControl(handle, 1, LAST_CHIP);
-	handle->numChips = Btc08AutoAddress(handle);
+	if (last_chip_id != 0)
+	{
+		Btc08SetControl(handle, last_chip_id, LAST_CHIP);
+		handle->numChips = Btc08AutoAddress(handle);
+		ReadId(handle);
+	}
 
-	// 5. Enable all cores
-	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
+	// 5. Enable cores
+	for (int i=0; i<handle->numChips; i++) {
+		Btc08SetDisable (handle, i, disable_cores);
+	}
 
 	// 6. Set PLL freq
-	SetPllFreq(handle, hService->pll_freq);
+	type = get_board_type(handle);
+	if (type == BOARD_TYPE_ASIC) {
+		NxDbgMsg(NX_DBG_INFO, "[SET_PLL] Set PLL %d\n", hService->pll_freq);
+		if (0 > SetPllFreq(handle, hService->pll_freq)) {
+			return -1;
+		}
+	}
 
 	// 7. Find number of cores of individual chips
 	RunBist(handle);
@@ -279,7 +236,13 @@ static int InitializeMiningkLoop( SERVICE_INFO *hService )
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
 
 	// 9. Nonce Distribution
-	DistributionNonce(handle);
+	DistributionNonce(handle, start_full_nonce, end_full_nonce);
+	for( int i=0; i<handle->numChips ; i++ )
+	{
+		NxDbgMsg(NX_DBG_INFO, "Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n", i, handle->numCores[i],
+			handle->startNonce[i][0], handle->startNonce[i][1], handle->startNonce[i][2], handle->startNonce[i][3],
+			handle->endNonce[i][0], handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3]);
+	}
 
 	hService->jobId = 1;
 
@@ -305,16 +268,12 @@ static void AddGoldenJob( SERVICE_INFO *hService, VECTOR_DATA *data )
 
 	Btc08WriteParam(handle, BCAST_CHIP_ID, data->midState, data->parameter);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, data->target);
-	DistributionNonce(handle);
-	for(int i=0; i<handle->numChips ; i++)
+	for( int i=0; i<handle->numChips ; i++ )
 	{
-		NxDbgMsg( NX_DBG_INFO, "Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n",
-			i, handle->numCores[i], handle->startNonce[i][0], handle->startNonce[i][1],
-			handle->startNonce[i][2], handle->startNonce[i][3], handle->endNonce[i][0],
-			handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3]);
 		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
 	}
 
+	NxDbgMsg(NX_DBG_INFO, "Run Job with jobId = %d\n", hService->jobId);
 	// Run job
 	Btc08RunJob(handle, BCAST_CHIP_ID, ASIC_BOOST_EN, hService->jobId++);
 	if(hService->jobId >= (MAX_JOB_ID-1))
@@ -424,41 +383,35 @@ static void *WorkLoop( void *arg )
 	{
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_GN))	// Check GN GPIO pin
 		{
-			for (int i=1; i<=handle->numChips; i++)
+			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
+			gn_job_id  = res[1];
+			gn_irq 	   = res[2] & (1<<0);
+			chipId     = res[3];
+
+			if (0 != gn_irq)		// If GN IRQ is set, then handle GN
 			{
-				Btc08ReadJobId(handle, i, res, res_size);
-				gn_job_id  = res[1];
-				gn_irq 	   = res[2] & (1<<0);
-				chipId     = res[3];
-
-				NxDbgMsg(NX_DBG_INFO, " <== OON jobId(%d) GN jobid(%d) ChipId(%d) %s %s %s\n",
-							res[0], res[1], res[3],
-							(0 != (res[2] & (1<<2))) ? "FIFO is full":"",
-							(0 != (res[2] & (1<<1))) ? "OON IRQ":"",
-							(0 != gn_irq) ? "GN IRQ":"");
-
-				if (0 != gn_irq)		// If GN IRQ is set, then handle GN
+				NxDbgMsg(NX_DBG_INFO, "%5s === GN IRQ on chip#%d gn_jobid:%d!!! ===\n", "", chipId, gn_job_id);
+				if (0 == handleGN(handle, chipId, (uint8_t *)found_nonce, &micro_job_id, &data))
 				{
-					if (0 == handleGN(handle, chipId, (uint8_t *)found_nonce, &micro_job_id, &data))
+					for (int i=0; i<4; i++)
 					{
-						for (int i=0; i<4; i++)
+						if((micro_job_id & (1<<i)) != 0)
 						{
-							if((micro_job_id & (1<<i)) != 0)
-							{
-								memcpy(&data, &(data.vmask_001[(1<<i)]), 4);
-								if (!submit_nonce(&data, found_nonce[i])) {
-									NxDbgMsg(NX_DBG_ERR, "%5s Failed: invalid nonce 0x%08x\n", "", found_nonce[i]);
-									hService->bExitWorkLoop = 1;
-									break;
-								} else {
-									NxDbgMsg(NX_DBG_INFO, "%5s Succeed: valid nonce 0x%08x\n", "", found_nonce[i]);
-								}
+							memcpy(&data, &(data.vmask_001[(1<<i)]), 4);
+							if (!submit_nonce(&data, found_nonce[i])) {
+								NxDbgMsg(NX_DBG_ERR, "%5s Failed: invalid nonce 0x%08x for job#%d\n",
+										"", found_nonce[i], gn_job_id);
+								hService->bExitWorkLoop = 1;
+								break;
+							} else {
+								NxDbgMsg(NX_DBG_INFO, "%5s Succeed: valid nonce 0x%08x for job#%d\n",
+										"", found_nonce[i], gn_job_id);
 							}
 						}
 					}
-				} else {			// If GN IRQ is not set, then go to check OON
-					NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!!!\n", "");
 				}
+			} else {			// If GN IRQ is not set, then go to check OON
+				//NxDbgMsg(NX_DBG_INFO, "%5s === H/W GN occured but GN_IRQ value is not set!!!\n", "");
 			}
 		}
 
@@ -509,7 +462,7 @@ failure:
 /* Monitor Loop */
 void *MonitorLoop( void *arg )
 {
-	int adcCh = 0;
+	int adcCh = 1;
 	float mv;
 	char reason[1024];
 	SERVICE_INFO *hService = (SERVICE_INFO*)arg;
@@ -536,7 +489,7 @@ void *MonitorLoop( void *arg )
 	return (void*)0xDeadFace;
 }
 
-static SERVICE_INFO *StartService( float max_temp, int freq )
+static SERVICE_INFO *StartService( float max_temp, int freq, uint8_t disable_core_num )
 {
 	SERVICE_INFO *hService;
 
@@ -550,6 +503,7 @@ static SERVICE_INFO *StartService( float max_temp, int freq )
 
 	hService->pll_freq = freq;
 	hService->tempAlertValue = max_temp;
+	hService->disable_core_num = disable_core_num;
 	hService->bExitWorkLoop = 0;
 	hService->bExitMonitorLoop = 0;
 
@@ -615,16 +569,19 @@ static void ChipSortingBIST(int pll_freq)
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
-	int adcCh = 0;
+	int adcCh = 1;
 	int freq = 0;
 	float temperature;
 	int active_chips = 0;
 	char reason[1024] = {0,};
+	BOARD_TYPE type = BOARD_TYPE_ASIC;
 
 	BTC08_HANDLE handle = CreateBtc08(0);
 
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);
+
+	type = get_board_type(handle);
 
 	// seq1. read the number of chips
 	handle->numChips = Btc08AutoAddress(handle);
@@ -649,7 +606,14 @@ static void ChipSortingBIST(int pll_freq)
 		freq = pll_freq;
 
 		// seq2. set(change) pll to each chip
-		SetPllFreq(handle, freq);
+		if (type == BOARD_TYPE_ASIC)
+		{
+			if (0 > SetPllFreq(handle, freq)) {
+				memset(reason, 0, sizeof(char)*512);
+				snprintf(reason, sizeof(reason), "test stopped due to failed to set pll freq %d\n", pll_freq);
+				goto failure;
+			}
+		}
 
 		// seq3. read the temperature
 		temperature = get_temp(get_mvolt(adcCh));
@@ -672,7 +636,14 @@ static void ChipSortingBIST(int pll_freq)
 			freq = GetPllIdx2Freq(pll_idx);
 
 			// seq2. set(change) pll to each chip
-			SetPllFreq(handle, freq);
+			if (type == BOARD_TYPE_ASIC)
+			{
+				if (0 > SetPllFreq(handle, freq)) {
+					memset(reason, 0, sizeof(char)*512);
+					snprintf(reason, sizeof(reason), "test stopped due to failed to set pll freq %d\n", freq);
+					goto failure;
+				}
+			}
 
 			// seq3. read the temperature
 			temperature = get_temp(get_mvolt(adcCh));
@@ -687,6 +658,8 @@ static void ChipSortingBIST(int pll_freq)
 
 			// seq6. report result (pll freq, temperature, number of cores)
 			reportBistResult(freq, temperature, handle);
+
+			usleep(10 * 1000);
 		}
 	}
 
@@ -758,6 +731,7 @@ void ScenarioTestLoop(void)
 			{
 				float max_temp = 100.0;
 				int   pll_freq = 300;
+				uint8_t disable_core_num = 0;
 				if( cmdCnt > 1 ) {
 					max_temp = strtol(cmd[1], 0, 10);
 					if (max_temp > 100.00) {
@@ -770,8 +744,15 @@ void ScenarioTestLoop(void)
 						pll_freq = 1000;
 					}
 				}
-				printf("max_temp = %.3f pll_freq = %d\n", max_temp, pll_freq);
-				hService = StartService(max_temp, pll_freq);
+				if (cmdCnt > 3) {
+					disable_core_num = strtol(cmd[3], 0, 10);
+					if (disable_core_num > 30) {
+						disable_core_num = 0;
+					}
+				}
+				printf("max_temp = %.3f pll_freq = %d, disable_core_num = %d\n",
+						max_temp, pll_freq, disable_core_num);
+				hService = StartService(max_temp, pll_freq, disable_core_num);
 			}
 		}
 		else if( !strcasecmp(cmd[0], "2") )

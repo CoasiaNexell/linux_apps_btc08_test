@@ -531,7 +531,7 @@ void GetGoldenNonce( uint8_t startNonce[4], uint8_t endNonce[4] )
 static void DumpData( const char *name, void *data, int size )
 {
 	uint8_t *buf = (uint8_t *)data;
-	printf("%s(%d) : ", name, size);
+	NxDbgMsg(NX_DBG_DEBUG, "%s(%d) : ", name, size);
 	for( int i=0 ; i < size ; i++ )
 	{
 		NxDbgMsg(NX_DBG_DEBUG, "%02x", buf[i]);
@@ -641,7 +641,7 @@ static void get_vmask(char *bbversion, int *vmask_003, uint32_t *vmask_001)
 			vmask_001[i] = vmask_001[0];
 		}
 		else {
-			printf("vmask_001[%d]=%02x\n", i, vmask_001[i]);
+			NxDbgMsg(NX_DBG_DEBUG, "vmask_001[%d]=%02x\n", i, vmask_001[i]);
 		}
 	}
 }
@@ -846,8 +846,6 @@ bool fulltest(const unsigned char *hash, const unsigned char *target)
 	bool rc = true;
 	int i;
 
-	printf("============ fulltest =============\n");
-
 	for (i = 28 / 4; i >= 0; i--) {
 		uint32_t h32tmp = le32toh(hash32[i]);
 		uint32_t t32tmp = le32toh(target32[i]);
@@ -861,7 +859,7 @@ bool fulltest(const unsigned char *hash, const unsigned char *target)
 			break;
 		}
 	}
-#if	1
+#if	DEBUG
 	unsigned char hash_swap[32], target_swap[32];
 	char *hash_str, *target_str;
 
@@ -1040,12 +1038,12 @@ void GetGoldenVectorWithVMask( int idx, VECTOR_DATA *data, int enMidRandom )
 	data->endNonce[2] = 0xff;
 	data->endNonce[3] = 0xff;
 
-	printf("=======================================\n");
-	printf("Input Vector (%d):\n", idx);
+	NxDbgMsg(NX_DBG_DEBUG, "=======================================\n");
+	NxDbgMsg(NX_DBG_INFO, "Input Vector (%d):\n", idx);
 	DumpGoldenVector(&gstGoldenData[idx]);
-	printf("=======================================\n");
+	NxDbgMsg(NX_DBG_DEBUG, "=======================================\n");
 	DumpVectorData(data);
-	printf("=======================================\n");
+	NxDbgMsg(NX_DBG_DEBUG, "=======================================\n");
 }
 
 void GetBistVector( VECTOR_DATA *data )

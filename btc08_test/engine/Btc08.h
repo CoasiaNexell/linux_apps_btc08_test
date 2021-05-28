@@ -85,6 +85,11 @@ typedef enum {
     GPIO_TYPE_RESET
 } GPIO_TYPE;
 
+typedef enum {
+	BOARD_TYPE_FPGA,
+	BOARD_TYPE_ASIC
+} BOARD_TYPE;
+
 #define STATUS_LOCKED     1
 #define STATUS_UNLOCKED   0
 
@@ -134,4 +139,8 @@ int  ReadPllLockStatus(BTC08_HANDLE handle, int chipId);
 int  SetPllFreq       (BTC08_HANDLE handle, int freq);
 
 void ReadId(BTC08_HANDLE handle);
+void ReadBist(BTC08_HANDLE handle);
+void RunBist(BTC08_HANDLE handle);
+BOARD_TYPE get_board_type(BTC08_HANDLE handle);
+void DistributionNonce(BTC08_HANDLE handle, uint8_t start_nonce[4], uint8_t end_nonce[4]);
 #endif // _BTC08_H_

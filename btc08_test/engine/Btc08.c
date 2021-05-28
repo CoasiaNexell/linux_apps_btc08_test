@@ -1127,7 +1127,7 @@ int SetPllFreq(BTC08_HANDLE handle, int freq)
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		SetPllConfigByIdx(handle, chipId, pll_idx);
-		ReadPllLockStatus(handle, chipId);
+		//ReadPllLockStatus(handle, chipId);
 	}
 
 	return 0;
@@ -1137,11 +1137,128 @@ void ReadId(BTC08_HANDLE handle)
 {
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	int active_chips = 0;
 
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadId(handle, chipId, res, res_size);
-		NxDbgMsg( NX_DBG_INFO, "[READ_ID] ChipId = %d, NumJobs = %d\n",
-					chipId, (res[2]&7) );
+		if(res[3] == chipId)
+		{
+			active_chips++;
+			NxDbgMsg(NX_DBG_DEBUG, "[READ_ID] ChipId = %d, NumJobs = %d\n",
+					chipId, (res[2]&7));
+		}
+		else
+		{
+			NxDbgMsg(NX_DBG_ERR, "[READ_ID] (ChipId = %d) != (ret[3] = %d)\n",
+					chipId, res[3]);
+		}
 	}
+	NxDbgMsg(NX_DBG_INFO, "[READ_ID] Active NumChips = %d\n", active_chips);
+}
+
+BOARD_TYPE get_board_type(BTC08_HANDLE handle)
+{
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	BOARD_TYPE type = BOARD_TYPE_ASIC;
+
+	Btc08ReadFeature(handle, BCAST_CHIP_ID, res, res_size);
+	if ((res[1] & 0x0f) == 0x05)
+		type = BOARD_TYPE_ASIC;
+	else
+		type = BOARD_TYPE_FPGA;
+
+	return type;
+}
+
+void ReadBist(BTC08_HANDLE handle)
+{
+	uint8_t *ret;
+
+	for (int chipId = 1; chipId <= handle->numChips; chipId++)
+	{
+		// If it's not BUSY status, read the number of cores in next READ_BIST
+		for (int i=0; i<10; i++) {
+			ret = Btc08ReadBist(handle, chipId);
+			if ( (ret[0] & 1) == 0 )
+				break;
+			else
+				NxDbgMsg( NX_DBG_INFO, "[READ_BIST] ChipId = %d, Status = %s, NumCores = %d\n",
+						chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
+
+			usleep( 300 );
+		}
+
+		ret = Btc08ReadBist(handle, chipId);
+
+		handle->numCores[chipId-1] = ret[1];
+		NxDbgMsg( NX_DBG_INFO, "[READ_BIST] ChipId = %d, Status = %s, NumCores = %d\n",
+					chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
+	}
+}
+
+void RunBist(BTC08_HANDLE handle)
+{
+	uint8_t *ret;
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+
+	NxDbgMsg(NX_DBG_INFO, "=== RUN BIST ==\n");
+
+	Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
+	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
+
+	// Set the golden nonce instead of the nonce range
+	Btc08WriteNonce (handle, BCAST_CHIP_ID, golden_nonce, golden_nonce);
+	//Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
+	Btc08RunBist    (handle, BCAST_CHIP_ID, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
+	ReadBist(handle);
+}
+
+void DistributionNonce(BTC08_HANDLE handle, uint8_t start_nonce[4], uint8_t end_nonce[4])
+{
+	int ii;
+	uint32_t totalCores = 0;
+	uint32_t noncePerCore;
+	uint32_t startNonce, endNonce;
+	uint32_t nonce_diff;
+	uint32_t temp_endnonce;
+
+	startNonce = (start_nonce[0] << 24) | (start_nonce[1] << 16) | (start_nonce[2] << 8) | (start_nonce[3]);
+	endNonce   = (end_nonce[0] << 24) | (end_nonce[1] << 16) | (end_nonce[2] << 8) | (end_nonce[3]);
+	nonce_diff = endNonce - startNonce;
+
+	for( int i=0 ; i<handle->numChips ; i++ )
+	{
+		totalCores += handle->numCores[i];
+	}
+	NxDbgMsg(NX_DBG_INFO, "Total Cores = %d\n", totalCores );
+
+	noncePerCore = nonce_diff / totalCores;
+	NxDbgMsg(NX_DBG_DEBUG, "startNonce=0x%08x(%d) endNonce = 0x%08x, nonce_diff = 0x%08x, noncePerCore = 0x%08x\n",
+			startNonce, startNonce, endNonce, nonce_diff, noncePerCore);
+	for( ii=0 ; ii<handle->numChips-1 ; ii++ )
+	{
+		temp_endnonce = startNonce + (noncePerCore*handle->numCores[ii]);
+		{
+			handle->startNonce[ii][0] = (startNonce>>24) & 0xff;
+			handle->startNonce[ii][1] = (startNonce>>16) & 0xff;
+			handle->startNonce[ii][2] = (startNonce>>8 ) & 0xff;
+			handle->startNonce[ii][3] = (startNonce>>0 ) & 0xff;
+			handle->endNonce[ii][0]   = (temp_endnonce>>24) & 0xff;
+			handle->endNonce[ii][1]   = (temp_endnonce>>16) & 0xff;
+			handle->endNonce[ii][2]   = (temp_endnonce>>8 ) & 0xff;
+			handle->endNonce[ii][3]   = (temp_endnonce>>0 ) & 0xff;
+		}
+		startNonce = temp_endnonce + 1;
+	}
+	handle->startNonce[ii][0] = (startNonce>>24) & 0xff;
+	handle->startNonce[ii][1] = (startNonce>>16) & 0xff;
+	handle->startNonce[ii][2] = (startNonce>>8 ) & 0xff;
+	handle->startNonce[ii][3] = (startNonce>>0 ) & 0xff;
+	handle->endNonce[ii][0]   = (endNonce>>24) & 0xff;
+	handle->endNonce[ii][1]   = (endNonce>>16) & 0xff;
+	handle->endNonce[ii][2]   = (endNonce>>8 ) & 0xff;
+	handle->endNonce[ii][3]   = (endNonce>>0 ) & 0xff;
 }
