@@ -239,7 +239,7 @@ static void TestWork(uint8_t last_chipId, int pll_freq)
 	ReadId(handle);
 
 	// Sequence 3. Reset S/W
-	Btc08Reset(handle);
+	Btc08Reset(handle, BCAST_CHIP_ID);
 
 	// Sequence 4. Set last chip
 	Btc08SetControl(handle, last_chipId, LAST_CHIP);
@@ -424,7 +424,7 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId, int pll_freq)
 	ReadId(handle);
 
 	// Sequence 3. Reset S/W
-	Btc08Reset(handle);
+	Btc08Reset(handle, BCAST_CHIP_ID);
 
 	// Sequence 4. Set last chip
 	if (last_chipId != 0)
@@ -747,7 +747,7 @@ static void TestInfiniteWorkLoop(uint32_t pll_freq)
 	ReadId(handle);
 
 	// Sequence 3. Reset S/W
-	Btc08Reset(handle);
+	Btc08Reset(handle, BCAST_CHIP_ID);
 
 	// Sequence 4. Set last chip
 	if (last_chipId != 0)
@@ -969,7 +969,7 @@ static void TestWorkLoop_RandomVector()
 	ReadId(handle);
 
 	// Sequence 3. Reset S/W
-	Btc08Reset(handle);
+	Btc08Reset(handle, BCAST_CHIP_ID);
 
 	// Sequence 4. Set last chip
 	if (last_chipId != 0)
