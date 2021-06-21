@@ -23,6 +23,7 @@ static void singlecommand_command_list()
 	printf("  1. H/W Reset\n");
 	printf("  2. Reset and Auto Address \n");
 	printf("  3. Reset and TestBist\n");
+	printf("    ex > 3 [disable_core_num] [freq] [wait_gpio] (default: 3 0 24 0)\n");
 	printf("  4. Set the chip to the last chip\n");
 	printf("    ex > 4 [chipId]\n");
 	printf("  5. Disable core\n");
@@ -499,12 +500,44 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num, uint32_t pl
 	RunJob(handle, is_full_nonce);
 }
 
-void TestBist( BTC08_HANDLE handle, int pll_freq )
+void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int wait_gpio )
 {
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 	BOARD_TYPE type = BOARD_TYPE_ASIC;
+	uint8_t disable_cores[32] = {0x00,};
+
+	if (wait_gpio)
+	{
+		NxDbgMsg( NX_DBG_INFO, "Wait until KEY0 is pressed\n");
+		while(true)
+		{
+			if (0 == GpioGetValue(handle->hKey0))
+			{
+				NxDbgMsg( NX_DBG_INFO, "KEY0 is pressed!!!\n");
+				break;
+			}
+			else
+				continue;
+		}
+	}
+
+	// Disable cores
+	if( disable_core_num > 0 )
+	{
+		memset(disable_cores, 0xff, 32);
+		if (disable_core_num != BTC08_NUM_CORES)
+			disable_cores[31] &= ~(1);
+		for (int i=1; i<(BTC08_NUM_CORES-disable_core_num); i++) {
+			disable_cores[31-(i/8)] &= ~(1 << (i % 8));
+		}
+	}
+	else
+	{
+		memset(disable_cores, 0x00, 32);
+	}
+	HexDump("[disable_cores]", disable_cores, 32);
 
 	Btc08ResetHW( handle, 1 );
 	Btc08ResetHW( handle, 0 );
@@ -518,15 +551,9 @@ void TestBist( BTC08_HANDLE handle, int pll_freq )
 	NxDbgMsg( NX_DBG_INFO, "[RESET]\n");
 	Btc08Reset(handle);
 
-	NxDbgMsg( NX_DBG_INFO, "[SET_CONTROL] Set chipId#1 as the LAST CHIP\n");
-	// Set last chip
-	Btc08SetControl(handle, 1, LAST_CHIP);
-	handle->numChips = Btc08AutoAddress(handle);
-	NxDbgMsg(NX_DBG_INFO, "[AUTO_ADDRESS] NumChips = %d\n", handle->numChips);
-
 	NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Enable all cores\n");
 	// Enable all cores
-	Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
+	Btc08SetDisable (handle, BCAST_CHIP_ID, disable_cores);
 
 	// seq2. Set PLL
 	type = get_board_type(handle);
@@ -1153,13 +1180,24 @@ void SingleCommandLoop(void)
 		//	Reset And BistTest
 		else if( !strcasecmp(cmd[0], "3") )
 		{
-			int pll_freq = 300;
+			uint8_t disable_core_num = 0;
+			int pll_freq = 24;
+			int wait_gpio = 0;
 			if( cmdCnt > 1 )
 			{
-				pll_freq = strtol(cmd[1], 0, 10);
+				disable_core_num = strtol(cmd[1], 0, 10);
 			}
-			printf("pll_freq = %d\n", pll_freq);
-			TestBist( handle, pll_freq );
+			if( cmdCnt > 2 )
+			{
+				pll_freq = strtol(cmd[2], 0, 10);
+			}
+			if( cmdCnt > 3 )
+			{
+				wait_gpio = strtol(cmd[3], 0, 10);
+			}
+			printf("disable_core_num = %d, pll_freq = %d, wait_gpio = %d\n",
+					disable_core_num, pll_freq, wait_gpio);
+			TestBist( handle, disable_core_num, pll_freq, wait_gpio );
 		}
 		//----------------------------------------------------------------------
 		//	Set the chip as the last chip

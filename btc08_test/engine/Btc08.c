@@ -113,18 +113,21 @@ static void _WriteDummy(BTC08_HANDLE handle, int txlen)
 
 BTC08_HANDLE CreateBtc08( int32_t index )
 {
-	int32_t gpioReset, gpioOon, gpioGn;
+	int32_t gpioReset, gpioOon, gpioGn, gpioKey0;
 	BTC08_HANDLE handle = NULL;
 	SPI_HANDLE hSpi = NULL;
 	GPIO_HANDLE hReset = NULL;
 	GPIO_HANDLE hOon = NULL;
 	GPIO_HANDLE hGn = NULL;
+	GPIO_HANDLE hKey0 = NULL;
+
 	if( index == 0 )
 	{
 		hSpi = CreateSpi( "/dev/spidev0.0", 0, TX_RX_MAX_SPEED, 0, 8 );
 		gpioReset = GPIO_RESET_0;
 		gpioOon   = GPIO_IRQ_OON_0;
 		gpioGn    = GPIO_IRQ_GN_0;
+		gpioKey0  = GPIO_KEY_0;
 	}
 	else if( index == 1 )
 	{
@@ -132,6 +135,7 @@ BTC08_HANDLE CreateBtc08( int32_t index )
 		gpioReset = GPIO_RESET_1;
 		gpioOon   = GPIO_IRQ_OON_1;
 		gpioGn    = GPIO_IRQ_GN_1;
+		gpioKey0  = GPIO_KEY_0;
 	}
 	else
 	{
@@ -142,6 +146,7 @@ BTC08_HANDLE CreateBtc08( int32_t index )
 	hReset = CreateGpio(gpioReset);
 	hOon   = CreateGpio(gpioOon  );
 	hGn    = CreateGpio(gpioGn   );
+	hKey0  = CreateGpio(gpioKey0 );
 
 	if( !hSpi || !hReset || !hOon || !hGn )
 	{
@@ -151,6 +156,7 @@ BTC08_HANDLE CreateBtc08( int32_t index )
 	GpioSetDirection( hReset, GPIO_DIRECTION_OUT );
 	GpioSetDirection( hOon  , GPIO_DIRECTION_IN  );
 	GpioSetDirection( hGn   , GPIO_DIRECTION_IN  );
+	if (hKey0)	GpioSetDirection( hKey0 , GPIO_DIRECTION_IN  );
 
 	handle = (BTC08_HANDLE)malloc( sizeof(struct tag_BTC08_INFO) );
 	memset( handle, 0, sizeof(struct tag_BTC08_INFO) );
@@ -159,14 +165,17 @@ BTC08_HANDLE CreateBtc08( int32_t index )
 	handle->hReset = hReset;
 	handle->hOon   = hOon;
 	handle->hGn    = hGn;
+	if (hKey0)
+		handle->hKey0  = hKey0;
 
 	return handle;
 
 ERROR_EXIT:
-	if( hSpi )		DestroySpi ( hSpi   );
+	if( hSpi   )	DestroySpi ( hSpi   );
 	if( hReset )	DestroyGpio( hReset );
 	if( hOon   )	DestroyGpio( hOon   );
 	if( hGn    )	DestroyGpio( hGn    );
+	if( hKey0  )	DestroyGpio( hKey0  );
 	return NULL;
 }
 

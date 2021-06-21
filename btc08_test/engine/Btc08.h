@@ -62,6 +62,7 @@ struct tag_BTC08_INFO{
 	GPIO_HANDLE		hReset;
 	GPIO_HANDLE		hGn;
 	GPIO_HANDLE		hOon;
+	GPIO_HANDLE		hKey0;
 	SPI_HANDLE		hSpi;
 
 	bool			isAsicBoost;
@@ -92,6 +93,8 @@ typedef enum {
 
 #define STATUS_LOCKED     1
 #define STATUS_UNLOCKED   0
+
+#define GPIO_KEY_0               GPIOA3
 
 //
 //	pre-defined : SPI index & GN/OON/RESET pins
