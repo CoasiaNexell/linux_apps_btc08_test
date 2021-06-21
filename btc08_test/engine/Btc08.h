@@ -94,6 +94,22 @@ typedef enum {
 #define STATUS_LOCKED     1
 #define STATUS_UNLOCKED   0
 
+#define GPIO_RESET_0            GPIOD31
+#define GPIO_IRQ_OON_0          GPIOD29
+#define GPIO_IRQ_GN_0           GPIOD30
+
+#define GPIO_RESET_1             GPIOE4
+#define GPIO_IRQ_OON_1           GPIOE2
+#define GPIO_IRQ_GN_1            GPIOE3
+
+#define GPIO_HASH0_PLUG         GPIOA24		// ACTIVE_HIGH, High: Hash0 connected, Low: Hash0 removed
+#define GPIO_HASH0_BODDET       GPIOA20		// High: Hash0, Low: VTK
+#define GPIO_HASH0_PWREN         GPIOA0		// ACTIVE_HIGH, High: FAN ON, Low : FAN OFF
+
+#define GPIO_HASH1_PLUG         GPIOA11		// ACTIVE_HIGH, High: Hash1 connected, Low: Hash1 removed
+#define GPIO_HASH1_BODDET        GPIOA9		// High: Hash1, Low: VTK
+#define GPIO_HASH1_PWREN        GPIOA16		// ACTIVE_HIGH, High: FAN ON, Low : FAN OFF
+
 #define GPIO_KEY_0               GPIOA3
 
 //

@@ -3,6 +3,7 @@
 #include "TestFunction.h"
 #include "Utils.h"
 #include "GpioControl.h"
+#include "Btc08.h"
 
 #include "SingleCommand.h"
 #include "SimpleWork.h"
@@ -14,10 +15,6 @@
 #endif
 #define NX_DTAG "[MAIN]"
 #include "NX_DbgMsg.h"
-
-#define GPIO_HASH0_PLUG         (24)		// High: Hash0 connected, Low: Hash0 removed
-#define GPIO_HASH0_BODDET       (20)		// High: Hash0, Low: VTK
-#define GPIO_HASH0_PWREN         (0)		// High: FAN ON, Low : FAN OFF
 
 static void l1_command_liist()
 {
@@ -34,32 +31,72 @@ static void l1_command_liist()
 
 void setup_hashboard_gpio()
 {
-	int plug_status = 0;
-	int board_type = 0;
+	int plug_status_0 = 0, board_type_0 = 0;
+	int plug_status_1 = 0, board_type_1 = 0;
 
-	GPIO_HANDLE hPlug  = NULL;
-	GPIO_HANDLE hBdDET = NULL;
-	GPIO_HANDLE hPwrEn = NULL;
+	GPIO_HANDLE hPlug0  = NULL;
+	GPIO_HANDLE hBdDET0 = NULL;
+	GPIO_HANDLE hPwrEn0 = NULL;
+	GPIO_HANDLE hReset0 = NULL;
+	GPIO_HANDLE hPlug1  = NULL;
+	GPIO_HANDLE hBdDET1 = NULL;
+	GPIO_HANDLE hPwrEn1 = NULL;
+	GPIO_HANDLE hReset1 = NULL;
 
-	hPlug  = CreateGpio(GPIO_HASH0_PLUG);
-	hBdDET = CreateGpio(GPIO_HASH0_BODDET);
-	hPwrEn = CreateGpio(GPIO_HASH0_PWREN);
+	// Export gpio
+	hPlug0  = CreateGpio(GPIO_HASH0_PLUG);
+	hBdDET0 = CreateGpio(GPIO_HASH0_BODDET);
+	hPwrEn0 = CreateGpio(GPIO_HASH0_PWREN);
 
-	GpioSetDirection(hPlug,  GPIO_DIRECTION_IN);
-	GpioSetDirection(hBdDET, GPIO_DIRECTION_IN);
-	GpioSetDirection(hPwrEn, GPIO_DIRECTION_OUT);
+	hPlug1  = CreateGpio(GPIO_HASH1_PLUG);
+	hBdDET1 = CreateGpio(GPIO_HASH1_BODDET);
+	hPwrEn1 = CreateGpio(GPIO_HASH1_PWREN);
 
-	plug_status = GpioGetValue(hPlug);
-	board_type  = GpioGetValue(hBdDET);
-	GpioSetValue(hPwrEn, 1);
+	hReset0  = CreateGpio(GPIO_RESET_0);
+	hReset1  = CreateGpio(GPIO_RESET_1);
 
-	printf("Hash0: connection status(%s), board_type(%s)\n",
-			(plug_status == 1) ? "Connected":"Removed",
-			(board_type  == 1) ? "Hash":"VTK");
+	// Set direction
+	GpioSetDirection(hPlug0,  GPIO_DIRECTION_IN);
+	GpioSetDirection(hBdDET0, GPIO_DIRECTION_IN);
+	GpioSetDirection(hPwrEn0, GPIO_DIRECTION_OUT);
 
-	if( hPlug  )	DestroyGpio( hPlug );
-	if( hBdDET )	DestroyGpio( hBdDET );
-	if( hPwrEn )	DestroyGpio( hPwrEn );
+	GpioSetDirection(hPlug1,  GPIO_DIRECTION_IN);
+	GpioSetDirection(hBdDET1, GPIO_DIRECTION_IN);
+	GpioSetDirection(hPwrEn1, GPIO_DIRECTION_OUT);
+
+	GpioSetDirection(hReset0, GPIO_DIRECTION_OUT);
+	GpioSetDirection(hReset1, GPIO_DIRECTION_OUT);
+
+	// Read plug_status and board_type, FAN ON
+	plug_status_0 = GpioGetValue(hPlug0);
+	board_type_0  = GpioGetValue(hBdDET0);
+	GpioSetValue(hPwrEn0, 1);
+
+	plug_status_1 = GpioGetValue(hPlug1);
+	board_type_1  = GpioGetValue(hBdDET1);
+	GpioSetValue(hPwrEn1, 1);
+
+	GpioSetValue(hReset0, 0);
+	GpioSetValue(hReset1, 0);
+
+	printf("Hash0: connection status(%s), board_type(%s), Reset GPIO(%d)\n",
+			(plug_status_0 == 1) ? "Connected":"Removed",
+			(board_type_0  == 1) ? "Hash":"VTK",
+			GpioGetValue(hReset0));
+	printf("Hash1: connection status(%s), board_type(%s), Reset GPIO(%d)\n",
+			(plug_status_1 == 1) ? "Connected":"Removed",
+			(board_type_1  == 1) ? "Hash":"VTK",
+			GpioGetValue(hReset1));
+
+	// Unexport gpio
+	if( hPlug0  )	DestroyGpio( hPlug0 );
+	if( hBdDET0 )	DestroyGpio( hBdDET0 );
+	if( hPwrEn0 )	DestroyGpio( hPwrEn0 );
+	if( hReset0 )	DestroyGpio( hReset0 );
+	if( hPlug1  )	DestroyGpio( hPlug1 );
+	if( hBdDET1 )	DestroyGpio( hBdDET1 );
+	if( hPwrEn1 )	DestroyGpio( hPwrEn1 );
+	if( hReset1 )	DestroyGpio( hReset1 );
 }
 
 int main( int argc, char *argv[] )

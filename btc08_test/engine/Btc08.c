@@ -95,14 +95,6 @@ enum BTC08_cmd {
 
 #define HW_RESET_TIME			(200000)		//	50 msec
 
-#define GPIO_RESET_0	127
-#define GPIO_IRQ_OON_0	125
-#define GPIO_IRQ_GN_0	126
-
-#define GPIO_RESET_1	127
-#define GPIO_IRQ_OON_1	125
-#define GPIO_IRQ_GN_1	126
-
 static void _WriteDummy(BTC08_HANDLE handle, int txlen)
 {
 	handle->txBuf[txlen+0] = 0;
@@ -148,7 +140,7 @@ BTC08_HANDLE CreateBtc08( int32_t index )
 	hGn    = CreateGpio(gpioGn   );
 	hKey0  = CreateGpio(gpioKey0 );
 
-	if( !hSpi || !hReset || !hOon || !hGn )
+	if( !hSpi || !hReset || !hOon || !hGn /*|| !hKey0 */)
 	{
 		goto ERROR_EXIT;
 	}
