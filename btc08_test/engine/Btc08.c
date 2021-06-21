@@ -1081,11 +1081,11 @@ void SetPllConfigByIdx(BTC08_HANDLE handle, int chipId, int pll_idx)
 	// seq1. Disable FOUT
 	Btc08SetPllFoutEn(handle, chipId, FOUT_EN_DISABLE);
 
-	// seq3. Set PLL(change PMS value)
-	Btc08SetPllConfig(handle, chipId, pll_idx);
-
 	// seq2. Down reset
 	Btc08SetPllResetB(handle, chipId, RESETB_RESET);
+
+	// seq3. Set PLL(change PMS value)
+	Btc08SetPllConfig(handle, chipId, pll_idx);
 
 	// seq4. Up reset
 	Btc08SetPllResetB(handle, chipId, RESETB_ON);
@@ -1104,7 +1104,7 @@ int ReadPllLockStatus(BTC08_HANDLE handle, int chipId)
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 
 	lock_status = Btc08ReadPll(handle, chipId, res, 4);
-	NxDbgMsg(NX_DBG_DEBUG, "ReadPllLockStatus: res[0]:0x%02x, res[1]:0x%02x, res[2]:0x%02x, res[3]:0x%02x\n",
+	NxDbgMsg(NX_DBG_INFO, "ReadPllLockStatus: res[0]:0x%02x, res[1]:0x%02x, res[2]:0x%02x, res[3]:0x%02x\n",
 			res[0], res[1], res[2], res[3]);
 	DumpPllValue(res);
 	NxDbgMsg(NX_DBG_INFO, "chip#%d is %s\n", chipId,

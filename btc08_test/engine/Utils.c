@@ -143,7 +143,7 @@ void HexDump( const char *name, const void *data, int32_t size )
 	const uint8_t *_data = (const uint8_t*)data;
 
 	if( name )
-		NxDbgMsg(NX_DBG_DEBUG, "%s (%d): \n", name, size);
+		NxDbgMsg(NX_DBG_INFO, "%s (%d): \n", name, size);
 
 	while( offset < size )
 	{
@@ -186,7 +186,7 @@ void HexDump( const char *name, const void *data, int32_t size )
 			}
 		}
 		strcat(lineBuf, "\n");
-		NxDbgMsg(NX_DBG_DEBUG, "%s", lineBuf );
+		NxDbgMsg(NX_DBG_INFO, "%s", lineBuf );
 		offset += 16;
 	}
 }

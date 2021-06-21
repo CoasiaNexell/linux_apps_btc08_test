@@ -15,6 +15,7 @@
 #include "NX_DbgMsg.h"
 
 #define BTC08_NUM_CORES		30
+#define INFINITE_MINING		0
 
 static void singlecommand_command_list()
 {
@@ -27,7 +28,7 @@ static void singlecommand_command_list()
 	printf("  4. Set the chip to the last chip\n");
 	printf("    ex > 4 [chipId]\n");
 	printf("  5. Disable core\n");
-	printf("    ex > 5 [disable_core_num] [freq] [isfullnonce] (bypass:freq 24MHz)\n");
+	printf("    ex > 5 [disable_core_num] [freq] [isfullnonce] (default: 5 0 24 0)\n");
 	printf("  6. Write, Read Target\n");
 	printf("  7. Set, Read disable\n");
 	printf("  8. Read Revision\n");
@@ -43,6 +44,8 @@ static void singlecommand_command_list()
 	printf("  16. Read Job Id\n");
 	printf("  17. Read Disable\n");
 	printf("  18. Read Debug Cnt\n");
+	printf("  19. Set Reset GPIO\n");
+	printf("    ex > 19 [0/1] (default:0) \n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -213,12 +216,15 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
 		{
+#if INFINITE_MINING
+#else
 			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
 			oon_job_id = res[0];
 			oon_irq	  = res[2] & (1<<1);
 			chipId    = res[3];
 
 			if (0 != oon_irq)				// If OON IRQ is set, handle OON
+#endif
 			{
 				NxDbgMsg(NX_DBG_INFO, "*** OON IRQ on chip#%d for oon_job_id:%d!!! ***\n", chipId, oon_job_id);
 				handleOON(handle, BCAST_CHIP_ID);
@@ -239,32 +245,50 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 				currTime = get_current_ms();
 				totalTime = currTime - startTime;
 
+#if INFINITE_MINING
+				megaHash = totalProcessedHash / (1000*1000) * 2;
+#else
 				megaHash = totalProcessedHash / (1000*1000);
+#endif
 				NxDbgMsg(NX_DBG_INFO, "AVG : %.2f MHash/s,  Hash = %.2f GH, Time = %.2f sec, delta = %lld msec\n",
 						megaHash * 1000. / totalTime, megaHash/1000, totalTime/1000. , currTime - prevTime );
 
 				prevTime = currTime;
-
+#if INFINITE_MINING
+				for (int i=0; i<2; i++)
+				{
+					Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+					if (jobId == 256)
+						jobId = 0;
+					NxDbgMsg(NX_DBG_INFO, "[NEW_JOB] (GN GPIO:%d, OON GPIO:%d oonirq:%d)\n",
+							Btc08GpioGetValue(handle, GPIO_TYPE_GN), Btc08GpioGetValue(handle, GPIO_TYPE_OON), oon_irq);
+					ReadId(handle);
+				}
+#else
 				if (oon_cnt == numWorks)
 					ishashdone = true;
-				/*Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
-				if (jobId == 256)
-					jobId = 0;*/
-			} 
+#endif
+			}
+#if INFINITE_MINING
+#else
 			else		// OON IRQ is not set (cgminer: check OON timeout is expired)
 			{
 				//NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set! ===\n", "");
 				// if oon timeout is expired, disable chips
 				// if oon timeout is not expired, check oon gpio again
 			}
+#endif
 		}
 		sched_yield();
 	}
 
+#if INFINITE_MINING
+#else
 	if ((oon_cnt != numWorks) || (gn_cnt != numWorks))
 		NxDbgMsg(NX_DBG_INFO, "=== Test Failed!!!");
 	else
 		NxDbgMsg(NX_DBG_INFO, "=== Test Succeed!!!");
+#endif
 }
 
 static void Run1Job(BTC08_HANDLE handle)
@@ -1065,7 +1089,14 @@ void TestReadBist( BTC08_HANDLE handle )
 
 void TestSetPll( BTC08_HANDLE handle, int pll_freq )
 {
-	BOARD_TYPE type = get_board_type(handle);
+	BOARD_TYPE type;
+
+	// AUTO_ADDRESS > READ_ID
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "[AUTO_ADDRESS] NumChips = %d\n", handle->numChips);
+	ReadId(handle);
+
+	type = get_board_type(handle);
 	if (type == BOARD_TYPE_ASIC)
 		SetPllFreq(handle, pll_freq);
 	else
@@ -1216,7 +1247,7 @@ void SingleCommandLoop(void)
 		else if (!strcasecmp(cmd[0], "5") )
 		{
 			uint8_t disable_core_num = 0;
-			uint32_t pll_freq = 300;
+			uint32_t pll_freq = 24;
 			uint8_t is_full_nonce = 1;
 			if( cmdCnt > 1 )
 			{
@@ -1290,7 +1321,7 @@ void SingleCommandLoop(void)
 		//	Set Pll Test
 		else if ( !strcasecmp(cmd[0], "14") )
 		{
-			uint32_t pll_freq = 300;
+			uint32_t pll_freq = 24;
 			if ( cmdCnt > 1 )
 			{
 				pll_freq = strtol(cmd[1], 0, 10);
@@ -1330,7 +1361,7 @@ void SingleCommandLoop(void)
 			if ( cmdCnt > 1 )
 				val = strtol(cmd[1], 0, 10);
 			printf("val = %d\n", val);
-			TestResetGpio( handle, val );
+			TestResetGpio( handle, !val );
 		}
 	}
 
