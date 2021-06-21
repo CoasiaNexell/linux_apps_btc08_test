@@ -205,7 +205,7 @@ static int InitializeMiningkLoop( SERVICE_INFO *hService )
 	handle->numChips = Btc08AutoAddress(handle);
 
 	// 3. S/W Reset S/W
-	Btc08Reset(handle);
+	Btc08Reset(handle, BCAST_CHIP_ID);
 
 	// 4. Set last chip
 	if (last_chip_id != 0)

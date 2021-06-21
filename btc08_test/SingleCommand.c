@@ -549,7 +549,7 @@ void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int 
 
 	// Software reset (TODO: Check FIFO status if it's empty)
 	NxDbgMsg( NX_DBG_INFO, "[RESET]\n");
-	Btc08Reset(handle);
+	Btc08Reset(handle, BCAST_CHIP_ID);
 
 	NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Enable all cores\n");
 	// Enable all cores
@@ -684,7 +684,7 @@ static int TestWRDisable( BTC08_HANDLE handle )
 	// AUTO_ADDRESS
 	handle->numChips = Btc08AutoAddress(handle);
 	ReadId(handle);
-	Btc08Reset(handle);
+	Btc08Reset(handle, BCAST_CHIP_ID);
 
 	for (int chipId=1; chipId <= handle->numChips; chipId++)
 	{

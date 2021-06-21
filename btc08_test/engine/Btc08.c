@@ -346,10 +346,10 @@ uint8_t* Btc08ReadBist    (BTC08_HANDLE handle, uint8_t chipId)
 }
 
 
-int Btc08Reset       (BTC08_HANDLE handle)
+int Btc08Reset       (BTC08_HANDLE handle, uint8_t chipId)
 {
 	handle->txBuf[0] = SPI_CMD_RESET;
-	handle->txBuf[1] = 0x00;
+	handle->txBuf[1] = chipId;
 
 	_WriteDummy(handle, 2);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, 2, DUMMY_BYTES ) )
