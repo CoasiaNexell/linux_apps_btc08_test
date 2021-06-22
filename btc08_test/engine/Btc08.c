@@ -1232,6 +1232,11 @@ void DistributionNonce(BTC08_HANDLE handle, uint8_t start_nonce[4], uint8_t end_
 
 	for( int i=0 ; i<handle->numChips ; i++ )
 	{
+		if (1 <= handle->fault_chip_id)
+		{
+			if (i == 0)
+				continue;
+		}
 		totalCores += handle->numCores[i];
 	}
 	NxDbgMsg(NX_DBG_INFO, "Total Cores = %d\n", totalCores );
@@ -1241,6 +1246,11 @@ void DistributionNonce(BTC08_HANDLE handle, uint8_t start_nonce[4], uint8_t end_
 			startNonce, startNonce, endNonce, nonce_diff, noncePerCore);
 	for( ii=0 ; ii<handle->numChips-1 ; ii++ )
 	{
+		if (1 <= handle->fault_chip_id)
+		{
+			if (0 == ii)
+				continue;
+		}
 		temp_endnonce = startNonce + (noncePerCore*handle->numCores[ii]);
 		{
 			handle->startNonce[ii][0] = (startNonce>>24) & 0xff;

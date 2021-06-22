@@ -70,6 +70,8 @@ struct tag_BTC08_INFO{
 
 	uint8_t         last_queued_id;
 
+	uint8_t         fault_chip_id;
+
 	int32_t			numChips;
 	int32_t			numCores[MAX_CHIPS];
 
