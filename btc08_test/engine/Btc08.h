@@ -27,6 +27,7 @@
 
 #include "PllCtrl.h"
 #include "TestVector.h"
+#include "config.h"
 #define BCAST_CHIP_ID		0x00
 
 // RUN_JOB Param Bits
@@ -164,4 +165,7 @@ void ReadBist(BTC08_HANDLE handle);
 void RunBist(BTC08_HANDLE handle);
 BOARD_TYPE get_board_type(BTC08_HANDLE handle);
 void DistributionNonce(BTC08_HANDLE handle, uint8_t start_nonce[4], uint8_t end_nonce[4]);
+
+int plug_status_0, board_type_0;
+int plug_status_1, board_type_1;
 #endif // _BTC08_H_

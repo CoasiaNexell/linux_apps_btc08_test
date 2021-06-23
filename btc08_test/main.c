@@ -31,9 +31,6 @@ static void l1_command_liist()
 
 void setup_hashboard_gpio()
 {
-	int plug_status_0 = 0, board_type_0 = 0;
-	int plug_status_1 = 0, board_type_1 = 0;
-
 	GPIO_HANDLE hPlug0  = NULL;
 	GPIO_HANDLE hBdDET0 = NULL;
 	GPIO_HANDLE hPwrEn0 = NULL;
@@ -105,7 +102,14 @@ int main( int argc, char *argv[] )
 	static char cmd[NX_SHELL_MAX_ARG][NX_SHELL_MAX_STR];
 	int cmdCnt;
 
+#ifndef USE_BTC08_FPGA
 	setup_hashboard_gpio();
+	if ((plug_status_0 != 1) && (plug_status_1 != 1))
+	{
+		printf("Not connected!!!\n");
+		return;
+	}
+#endif
 
 	for( ;; )
 	{
