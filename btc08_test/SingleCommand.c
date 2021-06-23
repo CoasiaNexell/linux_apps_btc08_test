@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include "Utils.h"
 #include "Btc08.h"
+#include "TempCtrl.h"
 
 #include "TestVector.h"
 #include <sched.h>
@@ -55,6 +56,7 @@ static void singlecommand_command_list()
 	printf("  18. Read Debug Cnt\n");
 	printf("  19. Set Reset GPIO\n");
 	printf("    ex > 19 [0/1] (default:0) \n");
+	printf("  20. Read Voltage and Temperature\n");
 	printf("-----------------------------\n");
 	printf("  q. quit\n");
 	printf("=============================\n");
@@ -1313,14 +1315,52 @@ static int TestResetGpio( BTC08_HANDLE handle, uint8_t val )
 	return 0;
 }
 
+static int TestReadVolTemp( BTC08_HANDLE handle )
+{
+	int adcCh = 1;
+	float mv;
+	float currentTemp;
+
+	if (NULL == handle)
+	{
+		NxDbgMsg(NX_DBG_ERR, "handle is NULL\n");
+		return;
+	}
+
+#if USE_BTC08_FPGA
+	adcCh = 0;
+#else
+	if ((plug_status_0 == 1) && (plug_status_1 != 1)) {
+		adcCh = 0;
+	} else if ((plug_status_0 != 1) && (plug_status_1 == 1)) {
+		adcCh = 1;
+	}
+#endif
+
+	mv = get_mvolt(adcCh);
+	currentTemp = get_temp(mv);
+	NxDbgMsg(NX_DBG_INFO, "Hash%d: voltage(%.2f mV), temperature(%.3f C)\n", adcCh, mv, currentTemp);
+
+	return 0;
+}
+
 void SingleCommandLoop(void)
 {
 	static char cmdStr[NX_SHELL_MAX_ARG * NX_SHELL_MAX_STR];
 	static char cmd[NX_SHELL_MAX_ARG][NX_SHELL_MAX_STR];
 	int cmdCnt;
+	BTC08_HANDLE handle;
 
-	//	create BTC08 instance into index 0. ( /dev/spidev0.0 )
-	BTC08_HANDLE handle = CreateBtc08(0);
+#if USE_BTC08_FPGA
+	handle = CreateBtc08(0);
+#else
+	//	create BTC08 instance into index 0/1. ( /dev/spidev0.0 or /dev/spidev2.0 )
+	if ((plug_status_0 == 1) && (plug_status_1 != 1)) {
+		handle = CreateBtc08(0);
+	} else if ((plug_status_0 != 1) && (plug_status_1 == 1)) {
+		handle = CreateBtc08(1);
+	}
+#endif
 
 	for( ;; )
 	{
@@ -1512,6 +1552,11 @@ void SingleCommandLoop(void)
 				val = strtol(cmd[1], 0, 10);
 			printf("val = %d\n", val);
 			TestResetGpio( handle, !val );
+		}
+		// Read voltage and temperature
+		else if( !strcasecmp(cmd[0], "20") )
+		{
+			TestReadVolTemp( handle );
 		}
 	}
 

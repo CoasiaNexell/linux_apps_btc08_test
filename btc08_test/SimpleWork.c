@@ -217,6 +217,7 @@ static void TestWork(uint8_t last_chipId, int pll_freq)
 	bool	ishashdone = false;
 	uint8_t hashdone_allchip[256];
 	uint8_t hashdone_chip[256];
+	BTC08_HANDLE handle;
 	BOARD_TYPE type = BOARD_TYPE_ASIC;
 	VECTOR_DATA data;
 
@@ -227,7 +228,15 @@ static void TestWork(uint8_t last_chipId, int pll_freq)
 	NxDbgMsg(NX_DBG_INFO, "=== Start of TestWork! === [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
 
 	// Seqeunce 1. Create Handle
-	BTC08_HANDLE handle = CreateBtc08(0);
+#if USE_BTC08_FPGA
+	handle = CreateBtc08(0);
+#else
+	if ((plug_status_0 == 1) && (plug_status_1 != 1))
+		handle = CreateBtc08(0);
+	else if ((plug_status_0 != 1) && (plug_status_1 == 1))
+		handle = CreateBtc08(1);
+#endif
+
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);
 
@@ -401,6 +410,7 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId, int pll_freq)
 	uint8_t hashdone_allchip[256];
 	uint8_t hashdone_chip[256];
 	uint64_t hashrate;
+	BTC08_HANDLE handle;
 	BOARD_TYPE type = BOARD_TYPE_ASIC;
 	VECTOR_DATA data;
 
@@ -411,7 +421,14 @@ static void TestWorkLoop(int numWorks, uint8_t last_chipId, int pll_freq)
 	NxDbgMsg(NX_DBG_INFO, "=== Start workloop === [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
 
 	// Seqeunce 1. Create Handle
-	BTC08_HANDLE handle = CreateBtc08(0);
+#if USE_BTC08_FPGA
+	handle = CreateBtc08(0);
+#else
+	if ((plug_status_0 == 1) && (plug_status_1 != 1))
+		handle = CreateBtc08(0);
+	else if ((plug_status_0 != 1) && (plug_status_1 == 1))
+		handle = CreateBtc08(1);
+#endif
 
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);
@@ -731,10 +748,18 @@ static void TestInfiniteWorkLoop(uint32_t pll_freq)
 	uint32_t found_nonce[4];
 	int index = 0;
 	int last_chipId = 0;
+	BTC08_HANDLE handle;
 	BOARD_TYPE type = BOARD_TYPE_ASIC;
 
 	// Seqeunce 1. Create Handle
-	BTC08_HANDLE handle = CreateBtc08(0);
+#if USE_BTC08_FPGA
+	handle = CreateBtc08(0);
+#else
+	if ((plug_status_0 == 1) && (plug_status_1 != 1))
+		handle = CreateBtc08(0);
+	else if ((plug_status_0 != 1) && (plug_status_1 == 1))
+		handle = CreateBtc08(1);
+#endif
 
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);
@@ -950,13 +975,21 @@ static void TestWorkLoop_RandomVector()
 	uint32_t nonce = 0;
 	int index;
 	int last_chipId = 0;
+	BTC08_HANDLE handle;
 
 	srand( (uint32_t)get_current_ms() );
 
 	NxDbgMsg(NX_DBG_INFO, "=== Start workloop ===\n");
 
 	// Seqeunce 1. Create Handle
-	BTC08_HANDLE handle = CreateBtc08(0);
+#if USE_BTC08_FPGA
+	handle = CreateBtc08(0);
+#else
+	if ((plug_status_0 == 1) && (plug_status_1 != 1))
+		handle = CreateBtc08(0);
+	else if ((plug_status_0 != 1) && (plug_status_1 == 1))
+		handle = CreateBtc08(1);
+#endif
 
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);

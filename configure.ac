@@ -42,6 +42,17 @@ if test "x$crypto_ext" = xyes; then
 fi
 AM_CONDITIONAL([HAVE_CRYPTO_EXT], [test x$crypto_ext = xyes])
 
+btc08_fpga="no"
+
+AC_ARG_ENABLE([btc08_fpga],
+	[AC_HELP_STRING([--enable-btc08-fpga],[Compile support for BTC08 FPGA (default disabled)])],
+	[btc08_fpga=$enableval]
+	)
+if test "x$btc08_fpga" = xyes; then
+	AC_DEFINE([USE_BTC08_FPGA], [1], [Defined to 1 for using BTC08 FPGA])
+fi
+AM_CONDITIONAL([HAVE_BTC08_FPGA], [test x$btc08_fpga = xyes])
+
 # Checks for library functions.
 AC_FUNC_MALLOC
 

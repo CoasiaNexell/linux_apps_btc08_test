@@ -175,7 +175,15 @@ static int InitializeMiningkLoop( SERVICE_INFO *hService )
 	int last_chip_id = 0;
 	uint8_t disable_cores[32] = {0x00,};
 
+#if USE_BTC08_FPGA
 	hService->hBtc08 = CreateBtc08(0);
+#else
+	if ((plug_status_0 == 1) && (plug_status_1 != 1))
+		hService->hBtc08 = CreateBtc08(0);
+	else if ((plug_status_0 != 1) && (plug_status_1 == 1))
+		hService->hBtc08 = CreateBtc08(1);
+#endif
+
 	if (hService->hBtc08 == NULL)
 		return -1;
 
@@ -462,13 +470,23 @@ failure:
 /* Monitor Loop */
 void *MonitorLoop( void *arg )
 {
-	int adcCh = 1;
+	int adcCh = 0;
 	float mv;
 	char reason[1024];
 	SERVICE_INFO *hService = (SERVICE_INFO*)arg;
 
 	if (NULL == hService)
 		return (void*)0xDeadFace;
+
+#if USE_BTC08_FPGA
+	adcCh = 0;
+#else
+	if ((plug_status_0 == 1) && (plug_status_1 != 1)) {
+		adcCh = 0;
+	} else if ((plug_status_0 != 1) && (plug_status_1 == 1)) {
+		adcCh = 1;
+	}
+#endif
 
 	while( !hService->bExitMonitorLoop )
 	{
@@ -574,9 +592,17 @@ static void ChipSortingBIST(int pll_freq)
 	float temperature;
 	int active_chips = 0;
 	char reason[1024] = {0,};
+	BTC08_HANDLE handle;
 	BOARD_TYPE type = BOARD_TYPE_ASIC;
 
-	BTC08_HANDLE handle = CreateBtc08(0);
+#if USE_BTC08_FPGA
+	handle = CreateBtc08(0);
+#else
+	if ((plug_status_0 == 1) && (plug_status_1 != 1))
+		handle = CreateBtc08(0);
+	else if ((plug_status_0 != 1) && (plug_status_1 == 1))
+		handle = CreateBtc08(1);
+#endif
 
 	Btc08ResetHW(handle, 1);
 	Btc08ResetHW(handle, 0);
