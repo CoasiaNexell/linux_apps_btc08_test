@@ -1,5 +1,8 @@
 #include <stdio.h>
 #include <strings.h>
+#include <unistd.h>	//	getopt
+#include <stdlib.h>	//	atoi
+#include <getopt.h>
 #include "TestFunction.h"
 #include "Utils.h"
 #include "GpioControl.h"
@@ -96,58 +99,146 @@ void setup_hashboard_gpio()
 	if( hReset1 )	DestroyGpio( hReset1 );
 }
 
+
+void print_usage( char *appname )
+{
+	printf("\n------------------------------------------------------------------\n");
+	printf("usage : %s [options]\n", appname);
+	printf(" options : \n");
+	printf("   m [mode]          : mode( 1(bist), 2(mining), other(console)\n");
+	printf("   f [frequency]     : freqeuncy in MHz (default : 24)\n");
+	printf("   c [disable cores] : disable cores (default : 0)\n");
+	printf("   n [0 or 1]        : 0(short range), 1(full range) (default : 0)\n");
+	printf("------------------------------------------------------------------\n");
+}
+
 int main( int argc, char *argv[] )
 {
 	static char cmdStr[NX_SHELL_MAX_ARG * NX_SHELL_MAX_STR];
 	static char cmd[NX_SHELL_MAX_ARG][NX_SHELL_MAX_STR];
 	int cmdCnt;
+	int opt;
+
+	int mode = -1;			//	Test Mode : -1 (Interlactive Mode)
+	int freqM = 24;			//	frequence in MHz : default 24 MHz
+	int disCore = 0;		//	disable core
+	int testIndex = 0;		//	Test Item : BIST
+	int isFullNonce = 0;	//	Nonce Range for testing : 0(short), 1 (full)
+
+	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:h")))
+	{
+		switch (opt)
+		{
+		case 'm':	mode = atoi(optarg);			break;
+		case 'f':	freqM = atoi(optarg);			break;
+		case 'c':	disCore = atoi(optarg);			break;
+		case 'n':	isFullNonce = atoi(optarg);		break;
+		case 'h':	print_usage(argv[0]);			return 0;
+		default:	break;
+		}
+	}
 
 #ifndef USE_BTC08_FPGA
 	setup_hashboard_gpio();
 	if ((plug_status_0 != 1) && (plug_status_1 != 1))
 	{
 		printf("Not connected!!!\n");
-		return;
+		return -1;
 	}
 #endif
 
-	for( ;; )
+	switch ( mode )
 	{
-		l1_command_liist();
-		printf( "cmd > " );
-		fgets( cmdStr, NX_SHELL_MAX_ARG*NX_SHELL_MAX_STR - 1, stdin );
-		cmdCnt = Shell_GetArgument( cmdStr, cmd );
-
-		//----------------------------------------------------------------------
-		if( !strcasecmp(cmd[0], "q") )
+		//	BIST Test Mode
+		case 1:
 		{
-			printf("bye bye ~~\n");
+			BTC08_HANDLE handle;
+			printf("=====  BIST Test Mode  =====\n");
+			printf("  Disable Core : %d ea\n", disCore);
+			printf("  Freqeyncy    : %dMHz\n", freqM );
+			printf("============================\n");
+#if USE_BTC08_FPGA
+			handle = CreateBtc08(0);
+#else
+			//	create BTC08 instance into index 0/1. ( /dev/spidev0.0 or /dev/spidev2.0 )
+			if ((plug_status_0 == 1) && (plug_status_1 != 1)) {
+				handle = CreateBtc08(0);
+			} else if ((plug_status_0 != 1) && (plug_status_1 == 1)) {
+				handle = CreateBtc08(1);
+			}
+#endif
+			TestBist( handle, disCore, freqM, 1);
+			//	Make Reset State
+			Btc08ResetHW( handle, 1 );
 			break;
 		}
-		//----------------------------------------------------------------------
-		// Single Command
-		else if( !strcasecmp(cmd[0], "1") )
+
+		//	mining test
+		case 2:
 		{
-			SingleCommandLoop();
+			BTC08_HANDLE handle;
+#if USE_BTC08_FPGA
+			handle = CreateBtc08(0);
+#else
+			//	create BTC08 instance into index 0/1. ( /dev/spidev0.0 or /dev/spidev2.0 )
+			if ((plug_status_0 == 1) && (plug_status_1 != 1)) {
+				handle = CreateBtc08(0);
+			} else if ((plug_status_0 != 1) && (plug_status_1 == 1)) {
+				handle = CreateBtc08(1);
+			}
+#endif
+			printf("===== Mining Test Mode =====\n");
+			printf("  Disable Core : %d ea\n", disCore);
+			printf("  Freqeyncy    : %dMHz\n", freqM );
+			printf("  Nonce        : %s\n",  isFullNonce?"Full":"Short");
+			printf("============================\n");
+			TestDisableCore( handle, disCore, freqM, isFullNonce, 0 );
+
+			//	Make Reset State
+			Btc08ResetHW( handle, 1 );
+			break;
 		}
-		//----------------------------------------------------------------------
-		// Simple Work
-		else if( !strcasecmp(cmd[0], "2") )
-		{
-			SimpleWorkLoop();
-		}
-		//----------------------------------------------------------------------
-		// Scenario Test
-		else if( !strcasecmp(cmd[0], "3") )
-		{
-			ScenarioTestLoop();
-		}
-		//----------------------------------------------------------------------
-		// Function Test
-		else if( !strcasecmp(cmd[0], "4") )
-		{
-			FuntionTestLoop();
-		}
+
+		default :
+			for( ;; )
+			{
+				l1_command_liist();
+				printf( "cmd > " );
+				fgets( cmdStr, NX_SHELL_MAX_ARG*NX_SHELL_MAX_STR - 1, stdin );
+				cmdCnt = Shell_GetArgument( cmdStr, cmd );
+
+				//----------------------------------------------------------------------
+				if( !strcasecmp(cmd[0], "q") )
+				{
+					printf("bye bye ~~\n");
+					break;
+				}
+				//----------------------------------------------------------------------
+				// Single Command
+				else if( !strcasecmp(cmd[0], "1") )
+				{
+					SingleCommandLoop();
+				}
+				//----------------------------------------------------------------------
+				// Simple Work
+				else if( !strcasecmp(cmd[0], "2") )
+				{
+					SimpleWorkLoop();
+				}
+				//----------------------------------------------------------------------
+				// Scenario Test
+				else if( !strcasecmp(cmd[0], "3") )
+				{
+					ScenarioTestLoop();
+				}
+				//----------------------------------------------------------------------
+				// Function Test
+				else if( !strcasecmp(cmd[0], "4") )
+				{
+					FuntionTestLoop();
+				}
+			}
+		break;
 	}
 
 	return 0;

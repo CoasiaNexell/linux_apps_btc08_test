@@ -346,9 +346,9 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 #if INFINITE_MINING
 #else
 	if ((oon_cnt != numWorks) || (gn_cnt != numWorks))
-		NxDbgMsg(NX_DBG_INFO, "=== Test Failed!!!");
+		NxDbgMsg(NX_DBG_INFO, "=== Test Failed!!!\n");
 	else
-		NxDbgMsg(NX_DBG_INFO, "=== Test Succeed!!!");
+		NxDbgMsg(NX_DBG_INFO, "=== Test Succeed!!!\n");
 #endif
 }
 
@@ -1324,7 +1324,7 @@ static int TestReadVolTemp( BTC08_HANDLE handle )
 	if (NULL == handle)
 	{
 		NxDbgMsg(NX_DBG_ERR, "handle is NULL\n");
-		return;
+		return -1;
 	}
 
 #if USE_BTC08_FPGA
