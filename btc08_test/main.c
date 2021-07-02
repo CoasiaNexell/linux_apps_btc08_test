@@ -108,6 +108,7 @@ void print_usage( char *appname )
 	printf("   m [mode]          : mode( 1(bist), 2(mining), other(console)\n");
 	printf("   f [frequency]     : freqeuncy in MHz (default : 24)\n");
 	printf("   c [disable cores] : disable cores (default : 0)\n");
+	printf("   d [bitmask]       : disable core bit mask\n");
 	printf("   n [0 or 1]        : 0(short range), 1(full range) (default : 0)\n");
 	printf("------------------------------------------------------------------\n");
 }
@@ -125,7 +126,7 @@ int main( int argc, char *argv[] )
 	int testIndex = 0;		//	Test Item : BIST
 	int isFullNonce = 0;	//	Nonce Range for testing : 0(short), 1 (full)
 
-	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:h")))
+	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:d:h")))
 	{
 		switch (opt)
 		{
@@ -133,6 +134,7 @@ int main( int argc, char *argv[] )
 		case 'f':	freqM = atoi(optarg);			break;
 		case 'c':	disCore = atoi(optarg);			break;
 		case 'n':	isFullNonce = atoi(optarg);		break;
+		case 'd':	gDisableCore = strtol(optarg, NULL, 16); break;
 		case 'h':	print_usage(argv[0]);			return 0;
 		default:	break;
 		}
@@ -167,7 +169,7 @@ int main( int argc, char *argv[] )
 				handle = CreateBtc08(1);
 			}
 #endif
-			TestBist( handle, disCore, freqM, 1);
+			TestBist( handle, disCore, freqM, 0);
 			//	Make Reset State
 			Btc08ResetHW( handle, 1 );
 			break;
@@ -191,6 +193,7 @@ int main( int argc, char *argv[] )
 			printf("  Disable Core : %d ea\n", disCore);
 			printf("  Freqeyncy    : %dMHz\n", freqM );
 			printf("  Nonce        : %s\n",  isFullNonce?"Full":"Short");
+			printf("  Disable Mask : 0x%08x\n", gDisableCore);
 			printf("============================\n");
 			TestDisableCore( handle, disCore, freqM, isFullNonce, 0 );
 

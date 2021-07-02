@@ -27,6 +27,9 @@
 #define BR_JOB_CMD_RESET     1
 #define CHIPID_JOB           0
 
+void TestReadDisable( BTC08_HANDLE handle );
+unsigned int gDisableCore = 0xffffffff;
+
 static void singlecommand_command_list()
 {
 	printf("\n\n");
@@ -114,27 +117,26 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 	else
 		num_asic_cores = 1;
 
-#if DEBUG
 	// Sequence 1. Read Hash
 	Btc08ReadHash(handle, chipId, hash, hash_size);
 	for (int i=0; i<num_asic_cores; i++)
 	{
 		result = memcmp(default_golden_hash, &(hash[i*32]), 32);
 		if (result == 0)
-			NxDbgMsg(NX_DBG_INFO, "Result Hash of Inst_%s!!!\n",
+		{
+			NxDbgMsg(NX_DBG_INFO, "Matched Hash of Inst_%s!!!\n",
 					(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
+		}
 		else
 		{
-			NxDbgMsg(NX_DBG_ERR, "Failed: Result Hash of Inst_%s!!!\n",
+			NxDbgMsg(NX_DBG_ERR, "Failed: Not matched Hash of Inst_%s!!!\n",
 					(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
+			sprintf(title, "[hash] Inst_%s", (i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
+			HexDump2(title, &(hash[i*32]), 32);
+			HexDump2("[golden hash]", default_golden_hash, 32);
 			ret = -1;
 		}
 	}
-	for (int i=0; i<num_asic_cores; i++) {
-		sprintf(title, "Inst_%s", (i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))));
-		HexDump(title, &(hash[i*32]), 32);
-	}
-#endif
 
 	// Sequence 2. Read Result to read GN and clear GN IRQ
 	Btc08ReadResult(handle, chipId, res, res_size);
@@ -142,12 +144,12 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 	{
 		result = memcmp(golden_nonce, res + i*4, 4);
 		if (result == 0)
-			NxDbgMsg(NX_DBG_INFO, "[Inst_%s] %10s GN = %02x %02x %02x %02x \n",
+			NxDbgMsg(NX_DBG_INFO, "Matched GN [Inst_%s] %10s GN = %02x %02x %02x %02x \n",
 				(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))), "",
 				*(res + i*4), *(res + i*4 + 1), *(res + i*4 + 2), *(res + i*4 + 3));
 		else
 		{
-			NxDbgMsg(NX_DBG_ERR, "Failed: [Inst_%s] %10s GN = %02x %02x %02x %02x \n",
+			NxDbgMsg(NX_DBG_ERR, "Failed: Not matched GN [Inst_%s] %10s GN = %02x %02x %02x %02x \n",
 				(i==0) ? "Upper":(((i==1) ? "Lower": ((i==2) ? "Lower_2":"Lower_3"))), "",
 				*(res + i*4), *(res + i*4 + 1), *(res + i*4 + 2), *(res + i*4 + 3));
 			ret = -1;
@@ -593,18 +595,31 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 	BOARD_TYPE type = BOARD_TYPE_ASIC;
 
 	// Disable cores
-	if( disable_core_num > 0 )
+	if( gDisableCore != 0xffffffff )
 	{
+		//	Use user disable makse
 		memset(disable_cores, 0xff, 32);
-		disable_cores[31] &= ~(1);
-		for (int i=1; i<(BTC08_NUM_CORES-disable_core_num); i++) {
-			disable_cores[31-(i/8)] &= ~(1 << (i % 8));
-		}
+		disable_cores[28] = (gDisableCore >> 24) & 0xFF;
+		disable_cores[29] = (gDisableCore >> 16) & 0xFF;
+		disable_cores[30] = (gDisableCore >>  8) & 0xFF;
+		disable_cores[31] = (gDisableCore >>  0) & 0xFF;
 	}
 	else
 	{
-		memset(disable_cores, 0x00, 32);
+		if( disable_core_num > 0 )
+		{
+			memset(disable_cores, 0xff, 32);
+			disable_cores[31] &= ~(1);
+			for (int i=1; i<(BTC08_NUM_CORES-disable_core_num); i++) {
+				disable_cores[31-(i/8)] &= ~(1 << (i % 8));
+			}
+		}
+		else
+		{
+			memset(disable_cores, 0x00, 32);
+		}
 	}
+
 	HexDump("[disable_cores]", disable_cores, 32);
 
 	handle->fault_chip_id = fault_chip_id;
@@ -633,7 +648,10 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
 
 	// seq5. SET_DISABLE
-	NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable %d cores\n", disable_core_num);
+	if( gDisableCore != 0xffffffff )
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable cores : 0x%08x\n", gDisableCore);
+	else
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable %d cores\n", disable_core_num);
 	for (int i=0; i<handle->numChips; i++) {
 		Btc08SetDisable (handle, i, disable_cores);
 	}
@@ -689,19 +707,31 @@ void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int 
 	}
 
 	// Disable cores
-	if( disable_core_num > 0 )
+	if( gDisableCore != 0xffffffff )
 	{
+		//	Use user disable makse
 		memset(disable_cores, 0xff, 32);
-		if (disable_core_num != BTC08_NUM_CORES)
-			disable_cores[31] &= ~(1);
-		for (int i=1; i<(BTC08_NUM_CORES-disable_core_num); i++) {
-			disable_cores[31-(i/8)] &= ~(1 << (i % 8));
-		}
+		disable_cores[28] = (gDisableCore >> 24) & 0xFF;
+		disable_cores[29] = (gDisableCore >> 16) & 0xFF;
+		disable_cores[30] = (gDisableCore >>  8) & 0xFF;
+		disable_cores[31] = (gDisableCore >>  0) & 0xFF;
 	}
 	else
 	{
-		memset(disable_cores, 0x00, 32);
+		if( disable_core_num > 0 )
+		{
+			memset(disable_cores, 0xff, 32);
+			disable_cores[31] &= ~(1);
+			for (int i=1; i<(BTC08_NUM_CORES-disable_core_num); i++) {
+				disable_cores[31-(i/8)] &= ~(1 << (i % 8));
+			}
+		}
+		else
+		{
+			memset(disable_cores, 0x00, 32);
+		}
 	}
+
 	HexDump("[disable_cores]", disable_cores, 32);
 
 	Btc08ResetHW( handle, 1 );
@@ -716,7 +746,11 @@ void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int 
 	NxDbgMsg( NX_DBG_INFO, "[RESET]\n");
 	Btc08Reset(handle, BCAST_CHIP_ID);
 
-	NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Enable all cores\n");
+	if( gDisableCore != 0xffffffff )
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable cores : 0x%08x\n", gDisableCore);
+	else
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable %d cores\n", disable_core_num);
+//	NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Enable all cores\n");
 	// Enable all cores
 	Btc08SetDisable (handle, BCAST_CHIP_ID, disable_cores);
 
@@ -737,6 +771,8 @@ void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int 
 	// Run BIST
 	Btc08RunBist    (handle, BCAST_CHIP_ID, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
 	ReadBist(handle);
+
+	TestReadDisable(handle);
 }
 
 /* WRITE/READ TARGET */
@@ -1288,7 +1324,7 @@ void TestReadDisable( BTC08_HANDLE handle )
 	for (int chipId=1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadDisable(handle, chipId, res, res_size);
-		HexDump("read_disable", res, res_size);
+		HexDump2("read_disable", res, res_size);
 	}
 }
 
