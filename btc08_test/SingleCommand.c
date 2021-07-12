@@ -15,7 +15,6 @@
 #define NX_DTAG "[SingleCommand]"
 #include "NX_DbgMsg.h"
 
-#define BTC08_NUM_CORES     30
 #define INFINITE_MINING      0
 
 /* Two ways not to give job to chip1
@@ -188,6 +187,7 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 
 	Btc08WriteParam(handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
+#if 0		// For test
 	DistributionNonce(handle, start_nonce, end_nonce);
 	for (int i=0; i<handle->numChips; i++)
 	{
@@ -201,7 +201,12 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 			handle->endNonce[i][0], handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3]);
 		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
 	}
-
+#else
+	for (int i=0; i<handle->numChips; i++)
+	{
+		Btc08WriteNonce(handle, i+1, start_nonce, end_nonce);
+	}
+#endif
 	for (int i=0; i<numWorks; i++)
 	{
 		NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
@@ -347,7 +352,7 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 
 #if INFINITE_MINING
 #else
-	if ((oon_cnt != numWorks) || (gn_cnt != numWorks))
+	if ((oon_cnt != numWorks) || (gn_cnt != (numWorks * handle->numChips)))
 		NxDbgMsg(NX_DBG_INFO, "=== Test Failed!!!\n");
 	else
 		NxDbgMsg(NX_DBG_INFO, "=== Test Succeed!!!\n");
@@ -750,7 +755,7 @@ void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int 
 		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable cores : 0x%08x\n", gDisableCore);
 	else
 		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable %d cores\n", disable_core_num);
-//	NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Enable all cores\n");
+
 	// Enable all cores
 	Btc08SetDisable (handle, BCAST_CHIP_ID, disable_cores);
 
@@ -1315,6 +1320,7 @@ void TestReadJobId( BTC08_HANDLE handle )
 		DumpReadJobId(i, res);
 	}
 }
+
 
 void TestReadDisable( BTC08_HANDLE handle )
 {

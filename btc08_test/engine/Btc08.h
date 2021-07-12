@@ -38,7 +38,7 @@
 // SET_CONTROL Extra Bits
 #define LAST_CHIP		    (1<<15)
 #define OON_IRQ_EN		    (1<<4)
-#define UART_DIVIDER    	(0x03)
+#define UART_DIVIDER    	(0x0F)
 
 #define MAX_JOB_FIFO_NUM	4
 #define MAX_JOB_ID			256
@@ -52,8 +52,9 @@
 
 typedef struct tag_BTC08_INFO *BTC08_HANDLE;
 
-#define MAX_JOB_FIFO			4
-#define JOB_ID_NUM_MASK         (MAX_JOB_FIFO*2-1)	/* total 7 */
+#define BTC08_NUM_CORES     30
+#define MAX_JOB_FIFO        4
+#define JOB_ID_NUM_MASK     (MAX_JOB_FIFO*2-1)	/* total 7 */
 
 #define	SPI_MAX_TRANS	(1024)
 #define MAX_CHIPS		(32)
