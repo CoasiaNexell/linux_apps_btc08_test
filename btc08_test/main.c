@@ -116,6 +116,8 @@ void print_usage( char *appname )
 	printf("------------------------------------------------------------------\n");
 	printf("example1) auto bist\n");
 	printf(" btc08_test -m 3 -i 5 -r 5\n");
+	printf("example2) auto bist with one core in different locations\n");
+	printf(" btc08_test -m 4 -i 5 -r 5\n");
 	printf("------------------------------------------------------------------\n");
 }
 
@@ -212,7 +214,7 @@ int main( int argc, char *argv[] )
 			break;
 		}
 
-		//	BIST & Disable Core Test Mode
+		//	BIST & Disable Cores Test Mode
 		case 3:
 		{
 			BTC08_HANDLE handle;
@@ -249,7 +251,7 @@ int main( int argc, char *argv[] )
 				{
 					for (int cnt = 0; cnt < repeat_cnt; cnt++)
 					{
-						NxDbgMsg(NX_DBG_ERR, "freq:%d disable_core:%d(%d/%d)\n",
+						NxDbgMsg(NX_DBG_INFO, "freq:%d disable_core:%d(%d/%d)\n",
 							freq, (BTC08_NUM_CORES - core_num), (cnt+1), repeat_cnt);
 						TestBist(handle, (BTC08_NUM_CORES - core_num), freq, 0);
 						Btc08ReadDisable(handle, 1, res, res_size);
@@ -257,6 +259,64 @@ int main( int argc, char *argv[] )
 						fprintf(fd, "%d(0x%02x%02x%02x%02x) ",
 							handle->numCores[0], res[28], res[29], res[30], res[31]);
 
+						Btc08ResetHW( handle, 1 );
+						usleep(interval * 1000 * 1000);
+					}
+					fprintf(fd, "\t");
+					fflush(fd);
+				}
+				fprintf(fd, "\n");
+				sync();
+			}
+			Btc08ResetHW( handle, 1 );
+			fclose(fd);
+			break;
+		}
+
+		//	BIST & Disable 1 Core Test Mode
+		case 4:
+		{
+			BTC08_HANDLE handle;
+			uint8_t res[32] = {0x00,};
+			unsigned int res_size = sizeof(res)/sizeof(res[0]);
+
+			printf("=====  BIST & Disable 1 Core Test Mode  =====\n");
+			printf("  Interval     : %dsec\n", interval );
+			printf("  Repeat Cnt   : %d\n",    repeat_cnt );
+			printf("============================\n");
+#if USE_BTC08_FPGA
+			handle = CreateBtc08(0);
+#else
+			//	create BTC08 instance into index 0/1. ( /dev/spidev0.0 or /dev/spidev2.0 )
+			if ((plug_status_0 == 1) && (plug_status_1 != 1)) {
+				handle = CreateBtc08(0);
+			} else if ((plug_status_0 != 1) && (plug_status_1 == 1)) {
+				handle = CreateBtc08(1);
+			}
+#endif
+			FILE *fd = fopen("/home/root/disable_1_core.log", "w");
+			if (!fd) {
+				NxDbgMsg(NX_DBG_ERR, "Failed to open disable_1_core.log");
+				return -1;
+			}
+
+			Btc08ResetHW( handle, 1 );
+			for (int pll_idx = 0; pll_idx < NUM_PLL_SET; pll_idx++)
+			{
+				int freq = GetPllIdx2Freq(pll_idx);
+				fprintf(fd, "%d\t", freq);
+
+				NxDbgMsg(NX_DBG_ERR, "1\n");
+				for (int core_idx=0; core_idx < BTC08_NUM_CORES; core_idx++)
+				{
+					gDisableCore = ~(1 << (core_idx % 8));
+					for (int cnt = 0; cnt < repeat_cnt; cnt++)
+					{
+						NxDbgMsg(NX_DBG_INFO, "freq:%d Disable Mask : 0x%08x 0x%08x(%d/%d)\n",
+							freq, (1 << (core_idx % 8)), gDisableCore, (cnt+1), repeat_cnt);
+						//	Make Reset State
+						TestBist( handle, disCore, freqM, 0);
+						// TODO:
 						Btc08ResetHW( handle, 1 );
 						usleep(interval * 1000 * 1000);
 					}
