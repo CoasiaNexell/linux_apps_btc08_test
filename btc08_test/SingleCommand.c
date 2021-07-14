@@ -5,6 +5,7 @@
 #include "Utils.h"
 #include "Btc08.h"
 #include "TempCtrl.h"
+#include "AutoTest.h"
 
 #include "TestVector.h"
 #include <sched.h>
@@ -15,15 +16,13 @@
 #define NX_DTAG "[SingleCommand]"
 #include "NX_DbgMsg.h"
 
-#define INFINITE_MINING      0
-
 /* Two ways not to give job to chip1
  * BR_JOB_CMD_RESET:
  *    Give a job with BR and do CMD_RESET(chipId=1) once for each RUN_JOB
  * CHIPID_JOB:
  *    Give each chip one job except chip1
 */
-#define BR_JOB_CMD_RESET     1
+#define BR_JOB_CMD_RESET     0
 #define CHIPID_JOB           0
 
 void TestReadDisable( BTC08_HANDLE handle );
@@ -40,7 +39,7 @@ static void singlecommand_command_list()
 	printf("  4. Set the chip to the last chip\n");
 	printf("    ex > 4 [chipId]\n");
 	printf("  5. Disable core\n");
-	printf("    ex > 5 [disable_core_num] [freq] [isfullnonce] [fault_chip_id] (default: 5 0 24 0 0)\n");
+	printf("    ex > 5 [disable_core_num] [freq] [isfullnonce] [fault_chip_id] [isinfinitemining] (default: 5 0 24 0 0 0)\n");
 	printf("  6. Write, Read Target\n");
 	printf("  7. Set, Read disable\n");
 	printf("  8. Read Revision\n");
@@ -157,7 +156,7 @@ static int handleGN(BTC08_HANDLE handle, uint8_t chipId, uint8_t *golden_nonce)
 	return ret;
 }
 
-static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
+static int RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce, uint8_t is_infinite_mining)
 {
 	int chipId = 0x00, jobId = 0x01;
 	uint8_t oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id = 0x00;
@@ -187,7 +186,7 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 
 	Btc08WriteParam(handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
-#if 0		// For test
+#if 0
 	DistributionNonce(handle, start_nonce, end_nonce);
 	for (int i=0; i<handle->numChips; i++)
 	{
@@ -202,6 +201,7 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
 	}
 #else
+	// temporary changes: Write same nonce range to all of the chips to check if each chip works well.
 	for (int i=0; i<handle->numChips; i++)
 	{
 		Btc08WriteNonce(handle, i+1, start_nonce, end_nonce);
@@ -265,15 +265,48 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 
 		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
 		{
-#if INFINITE_MINING
-#else
-			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
-			oon_job_id = res[0];
-			oon_irq	  = res[2] & (1<<1);
-			chipId    = res[3];
+			if (0 == is_infinite_mining)		// Test 4 jobs
+			{
+				Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
+				oon_job_id = res[0];
+				oon_irq	  = res[2] & (1<<1);
+				chipId    = res[3];
 
-			if (0 != oon_irq)				// If OON IRQ is set, handle OON
-#endif
+				if (0 != oon_irq)				// If OON IRQ is set, handle OON
+				{
+					NxDbgMsg(NX_DBG_INFO, "*** OON IRQ on chip#%d for oon_job_id:%d!!! ***\n", chipId, oon_job_id);
+					handleOON(handle, BCAST_CHIP_ID);
+					oon_cnt++;
+
+					if (is_full_nonce) {
+						if (handle->isAsicBoost)
+							totalProcessedHash += (0x100000000 * 4);	//	0x100000000 * 4 (asic booster)
+						else
+							totalProcessedHash += 0x100000000;			//	0x100000000 * 4
+					} else {
+						if (handle->isAsicBoost)
+							totalProcessedHash += (0x11000000 * 4);		//	0x100000000 * 4 (asic booster)
+						else
+							totalProcessedHash += 0x11000000;			//	0x100000000 * 4
+					}
+
+					currTime = get_current_ms();
+					totalTime = currTime - startTime;
+					megaHash = totalProcessedHash / (1000*1000);
+
+					NxDbgMsg(NX_DBG_INFO, "AVG : %.2f MHash/s,  Hash = %.2f GH, Time = %.2f sec, delta = %lld msec\n",
+							megaHash * 1000. / totalTime, megaHash/1000, totalTime/1000. , currTime - prevTime );
+
+					prevTime = currTime;
+					if (oon_cnt == numWorks)
+						ishashdone = true;
+				}			// end of if (0 != oon_irq)
+				else		// OON IRQ is not set (cgminer: check OON timeout is expired)
+				{
+					//NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set! ===\n", "");
+				}
+			}
+			else		// Test infinite jobs
 			{
 				NxDbgMsg(NX_DBG_INFO, "*** OON IRQ on chip#%d for oon_job_id:%d!!! ***\n", chipId, oon_job_id);
 				handleOON(handle, BCAST_CHIP_ID);
@@ -293,17 +326,12 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 
 				currTime = get_current_ms();
 				totalTime = currTime - startTime;
-
-#if INFINITE_MINING
-				megaHash = totalProcessedHash / (1000*1000) * 2;
-#else
 				megaHash = totalProcessedHash / (1000*1000);
-#endif
+
 				NxDbgMsg(NX_DBG_INFO, "AVG : %.2f MHash/s,  Hash = %.2f GH, Time = %.2f sec, delta = %lld msec\n",
 						megaHash * 1000. / totalTime, megaHash/1000, totalTime/1000. , currTime - prevTime );
 
 				prevTime = currTime;
-#if INFINITE_MINING
 				for (int i=0; i<2; i++)
 				{
 					NxDbgMsg(NX_DBG_INFO, "%2s Run Job with jobId#%d\n", "", jobId);
@@ -326,37 +354,33 @@ static void RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce)
 					}
 					jobId++;
 #else
+					DbgGpioOn();
 					Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+					DbgGpioOff();
 #endif
 					if (jobId == 256)
 						jobId = 0;
 					ReadId(handle);
 				}
-#else
-				if (oon_cnt == numWorks)
-					ishashdone = true;
-#endif
 			}
-#if INFINITE_MINING
-#else
-			else		// OON IRQ is not set (cgminer: check OON timeout is expired)
-			{
-				//NxDbgMsg(NX_DBG_INFO, "%5s === OON IRQ is not set! ===\n", "");
-				// if oon timeout is expired, disable chips
-				// if oon timeout is not expired, check oon gpio again
-			}
-#endif
-		}
+		}		// end of if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))
 		sched_yield();
 	}
 
-#if INFINITE_MINING
-#else
-	if ((oon_cnt != numWorks) || (gn_cnt != (numWorks * handle->numChips)))
-		NxDbgMsg(NX_DBG_INFO, "=== Test Failed!!!\n");
-	else
-		NxDbgMsg(NX_DBG_INFO, "=== Test Succeed!!!\n");
-#endif
+	if (0 == is_infinite_mining)
+	{
+		if ((oon_cnt != numWorks) || (gn_cnt != (numWorks * handle->numChips)))
+		{
+			NxDbgMsg(NX_DBG_INFO, "=== Test Failed!!!\n");
+			return -1;
+		}
+		else
+		{
+			NxDbgMsg(NX_DBG_INFO, "=== Test Succeed!!!\n");
+			return 0;
+		}
+	} else
+		return 0;
 }
 
 static void Run1Job(BTC08_HANDLE handle)
@@ -573,7 +597,7 @@ void TestLastChip( BTC08_HANDLE handle, uint8_t fault_chip_id, uint32_t pll_freq
 	ReadBist(handle);
 
 	// seq7. WRITE_PARAM, WRITE_NONCE > RUN_JOB
-	RunJob(handle, 0);
+	RunJob(handle, 0, 0);
 }
 
 /* Disable core
@@ -590,8 +614,8 @@ void TestLastChip( BTC08_HANDLE handle, uint8_t fault_chip_id, uint32_t pll_freq
  * 			    if (gn_flag)		 { READ_HASH > READ_RESULT > READ_ID }
  *       }
 */
-void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
-		uint32_t pll_freq, uint8_t is_full_nonce, uint8_t fault_chip_id )
+int TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
+		uint32_t pll_freq, uint8_t is_full_nonce, uint8_t fault_chip_id, uint8_t is_infinite_mining )
 {
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
@@ -643,7 +667,7 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 	{
 		NxDbgMsg(NX_DBG_INFO, "[SET_PLL] Set PLL %d\n", pll_freq);
 		if (0 > SetPllFreq(handle, pll_freq))
-			return;
+			return -3;
 	}
 
 	// seq4. WRITE_PARAM, WRITE_NONCE, WRITE_TARGET
@@ -657,8 +681,8 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable cores : 0x%08x\n", gDisableCore);
 	else
 		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable %d cores\n", disable_core_num);
-	for (int i=0; i<handle->numChips; i++) {
-		Btc08SetDisable (handle, i, disable_cores);
+	for (int chipId=1; chipId <= handle->numChips; chipId++) {
+		Btc08SetDisable (handle, chipId, disable_cores);
 	}
 
 	// seq6. RUN_BIST > READ_BIST
@@ -684,9 +708,106 @@ void TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 		Btc08SetPllFoutEn(handle, 1, FOUT_EN_DISABLE);
 	}
 
+	for( int i=0 ; i<handle->numChips ; i++ )
+	{
+		if( handle->numCores[i] != (BTC08_NUM_CORES - disable_core_num) )
+		{
+			NxDbgMsg(NX_DBG_ERR, "BIST failed!!! handle->numCores[%d] = %d, expeded core = %d \n",
+				i, handle->numCores[i], (BTC08_NUM_CORES - disable_core_num));
+			return -2;
+		}
+	}
+
 	// seq8. WRITE_PARAM, WRITE_NONCE > RUN_JOB
-	RunJob(handle, is_full_nonce);
+	return RunJob(handle, is_full_nonce, is_infinite_mining);
 }
+
+int TestMiningWithoutBist( BTC08_HANDLE handle, uint8_t disable_core_num,
+		uint32_t pll_freq, uint8_t is_full_nonce, uint8_t fault_chip_id, uint8_t is_infinite_mining )
+{
+	uint8_t *ret;
+	uint8_t res[4] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	uint8_t disable_cores[32] = {0x00,};
+	BOARD_TYPE type = BOARD_TYPE_ASIC;
+
+	// Disable cores
+	if( gDisableCore != 0xffffffff )
+	{
+		//	Use user disable makse
+		memset(disable_cores, 0xff, 32);
+		disable_cores[28] = (gDisableCore >> 24) & 0xFF;
+		disable_cores[29] = (gDisableCore >> 16) & 0xFF;
+		disable_cores[30] = (gDisableCore >>  8) & 0xFF;
+		disable_cores[31] = (gDisableCore >>  0) & 0xFF;
+	}
+	else
+	{
+		if( disable_core_num > 0 )
+		{
+			memset(disable_cores, 0xff, 32);
+			disable_cores[31] &= ~(1);
+			for (int i=1; i<(BTC08_NUM_CORES-disable_core_num); i++) {
+				disable_cores[31-(i/8)] &= ~(1 << (i % 8));
+			}
+		}
+		else
+		{
+			memset(disable_cores, 0x00, 32);
+		}
+	}
+
+	HexDump("[disable_cores]", disable_cores, 32);
+
+	handle->fault_chip_id = fault_chip_id;
+
+	Btc08ResetHW( handle, 1 );
+	Btc08ResetHW( handle, 0 );
+
+	// seq1. AUTO_ADDRESS > READ_ID
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "[AUTO_ADDRESS] NumChips = %d\n", handle->numChips);
+	ReadId(handle);
+
+	// seq2. Set PLL
+	type = get_board_type(handle);
+	if (type == BOARD_TYPE_ASIC)
+	{
+		NxDbgMsg(NX_DBG_INFO, "[SET_PLL] Set PLL %d\n", pll_freq);
+		if (0 > SetPllFreq(handle, pll_freq))
+			return -3;
+	}
+
+	// seq3. SET_DISABLE
+	if( gDisableCore != 0xffffffff )
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable cores : 0x%08x\n", gDisableCore);
+	else
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable %d cores\n", disable_core_num);
+	for (int chipId=1; chipId <= handle->numChips; chipId++) {
+		Btc08SetDisable (handle, chipId, disable_cores);
+	}
+
+	// seq4. No BIST & Set OON_IRQ_EN and UART_DIVIDER
+	DbgGpioOn();
+	for (int chipId = 1; chipId <= handle->numChips; chipId++) {
+		Btc08WriteCoreCfg(handle, chipId, (BTC08_NUM_CORES - disable_core_num));
+	}
+	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));		// SoC example: 32'h0000_0011
+
+	// seq5. WRITE_PARAM, WRITE_NONCE > RUN_JOB
+	DbgGpioOff();
+	return RunJob(handle, is_full_nonce, is_infinite_mining);
+}
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+void DbgGpioOn();
+void DbgGpioOff();
+#ifdef __cplusplus
+};
+#endif
+
 
 void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int wait_gpio )
 {
@@ -774,7 +895,9 @@ void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int 
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
 	Btc08WriteNonce (handle, BCAST_CHIP_ID, golden_nonce, golden_nonce);
 	// Run BIST
+	DbgGpioOn();
 	Btc08RunBist    (handle, BCAST_CHIP_ID, default_golden_hash, default_golden_hash, default_golden_hash, default_golden_hash);
+	DbgGpioOff();
 	ReadBist(handle);
 
 	TestReadDisable(handle);
@@ -1330,7 +1453,7 @@ void TestReadDisable( BTC08_HANDLE handle )
 	for (int chipId=1; chipId <= handle->numChips; chipId++)
 	{
 		Btc08ReadDisable(handle, chipId, res, res_size);
-		HexDump2("read_disable", res, res_size);
+		HexDump("read_disable", res, res_size);
 	}
 }
 
@@ -1476,6 +1599,7 @@ void SingleCommandLoop(void)
 			uint32_t pll_freq = 24;
 			uint8_t is_full_nonce = 0;
 			int fault_chip_id = 0;
+			uint8_t is_infinite_mining = 0;
 			if( cmdCnt > 1 )
 			{
 				disable_core_num = strtol(cmd[1], 0, 10);
@@ -1492,9 +1616,13 @@ void SingleCommandLoop(void)
 			{
 				fault_chip_id = strtol(cmd[4], 0, 10);
 			}
-			printf("disable_core_num = %d, pll_freq = %d MHz is_full_nonce = %d, fault_chip_id = %d\n",
-					disable_core_num, pll_freq, is_full_nonce, fault_chip_id);
-			TestDisableCore( handle, disable_core_num, pll_freq, is_full_nonce, fault_chip_id );
+			if( cmdCnt > 5 )
+			{
+				is_infinite_mining = strtol(cmd[5], 0, 10);
+			}
+			printf("disable_core_num = %d, pll_freq = %d MHz is_full_nonce = %d, fault_chip_id = %d, is_infinite_mining = %d\n",
+					disable_core_num, pll_freq, is_full_nonce, fault_chip_id, is_infinite_mining);
+			TestDisableCore( handle, disable_core_num, pll_freq, is_full_nonce, fault_chip_id, is_infinite_mining );
 		}
 		//----------------------------------------------------------------------
 		//	Write/Read Target Test

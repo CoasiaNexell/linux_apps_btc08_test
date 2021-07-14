@@ -12,6 +12,7 @@
 #include "SingleCommand.h"
 #include "SimpleWork.h"
 #include "ScenarioTest.h"
+#include "AutoTest.h"
 
 // #define NX_DBG_OFF
 #ifdef NX_DTAG
@@ -106,18 +107,23 @@ void print_usage( char *appname )
 	printf("\n------------------------------------------------------------------\n");
 	printf("usage : %s [options]\n", appname);
 	printf(" options : \n");
-	printf("   m [mode]          : mode( 1(bist), 2(mining), other(console)\n");
+	printf("   m [mode]          : mode (1(bist), 2(mining), other(console))\n");
 	printf("   f [frequency]     : freqeuncy in MHz (default : 24)\n");
 	printf("   c [disable cores] : disable cores (default : 0)\n");
 	printf("   d [bitmask]       : disable core bit mask\n");
 	printf("   i [interval]      : interval (default: 1sec)\n");
 	printf("   r [repeat]        : repeat (default: 1)\n");
+	printf("   l [infinite mining]: infinite mining (default: 0)\n");
 	printf("   n [0 or 1]        : 0(short range), 1(full range) (default : 0)\n");
 	printf("------------------------------------------------------------------\n");
-	printf("example1) auto bist\n");
-	printf(" btc08_test -m 3 -i 5 -r 5\n");
-	printf("example2) auto bist with one core in different locations\n");
-	printf(" btc08_test -m 4 -i 5 -r 5\n");
+	printf("example 1) auto bist\n");
+	printf(" btc08_test -m 3 -i 3 -r 5\n");
+	printf("example 2) 1 core poistion\n");
+	printf(" btc08_test -m 4 -i 3 -r 3\n");
+	printf("example 3) Auto mining test\n");
+	printf(" btc08_test -m 5 -i 3 -r 3\n");
+	printf("example 4) Mining test without BIST\n");
+	printf(" btc08_test -m 7 -l 1\n");
 	printf("------------------------------------------------------------------\n");
 }
 
@@ -135,8 +141,9 @@ int main( int argc, char *argv[] )
 	int isFullNonce = 0;	//	Nonce Range for testing : 0(short), 1 (full)
 	int repeat_cnt = 1;     //  Repeat cnt : 1
 	int interval = 1;       //  Interval
+	int isInfiniteMining = 0;	// Infinite Mining: 0(default 4 jobs)
 
-	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:d:r:h")))
+	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:d:r:l:h")))
 	{
 		switch (opt)
 		{
@@ -147,6 +154,7 @@ int main( int argc, char *argv[] )
 		case 'r':	repeat_cnt = atoi(optarg);		break;
 		case 'i':	interval = atoi(optarg);		break;
 		case 'd':	gDisableCore = strtol(optarg, NULL, 16); break;
+		case 'l':	isInfiniteMining = atoi(optarg);		 break;
 		case 'h':	print_usage(argv[0]);			return 0;
 		default:	break;
 		}
@@ -206,128 +214,45 @@ int main( int argc, char *argv[] )
 			printf("  Freqeyncy    : %dMHz\n", freqM );
 			printf("  Nonce        : %s\n",  isFullNonce?"Full":"Short");
 			printf("  Disable Mask : 0x%08x\n", gDisableCore);
+			printf("  Infinite Mining : %d\n", isInfiniteMining);
 			printf("============================\n");
-			TestDisableCore( handle, disCore, freqM, isFullNonce, 0 );
+			TestDisableCore( handle, disCore, freqM, isFullNonce, 0, isInfiniteMining );
 
 			//	Make Reset State
 			Btc08ResetHW( handle, 1 );
 			break;
 		}
 
-		//	BIST & Disable Cores Test Mode
+		//	BIST & Disable Core Test Mode
 		case 3:
 		{
-			BTC08_HANDLE handle;
-			uint8_t res[32] = {0x00,};
-			unsigned int res_size = sizeof(res)/sizeof(res[0]);
-
-			printf("=====  BIST & Disable Core Test Mode  =====\n");
-			printf("  Interval     : %dsec\n", interval );
-			printf("  Repeat Cnt   : %d\n",    repeat_cnt );
-			printf("============================\n");
-#if USE_BTC08_FPGA
-			handle = CreateBtc08(0);
-#else
-			//	create BTC08 instance into index 0/1. ( /dev/spidev0.0 or /dev/spidev2.0 )
-			if ((plug_status_0 == 1) && (plug_status_1 != 1)) {
-				handle = CreateBtc08(0);
-			} else if ((plug_status_0 != 1) && (plug_status_1 == 1)) {
-				handle = CreateBtc08(1);
-			}
-#endif
-			FILE *fd = fopen("/home/root/disabled_core.log", "w");
-			if (!fd) {
-				NxDbgMsg(NX_DBG_ERR, "Failed to open disabled_core.log");
-				return -1;
-			}
-
-			Btc08ResetHW( handle, 1 );
-			for (int pll_idx = 0; pll_idx < NUM_PLL_SET; pll_idx++)
-			{
-				int freq = GetPllIdx2Freq(pll_idx);
-				fprintf(fd, "%d\t", freq);
-
-				for (int core_num=1; core_num <= BTC08_NUM_CORES; core_num++)
-				{
-					for (int cnt = 0; cnt < repeat_cnt; cnt++)
-					{
-						NxDbgMsg(NX_DBG_INFO, "freq:%d disable_core:%d(%d/%d)\n",
-							freq, (BTC08_NUM_CORES - core_num), (cnt+1), repeat_cnt);
-						TestBist(handle, (BTC08_NUM_CORES - core_num), freq, 0);
-						Btc08ReadDisable(handle, 1, res, res_size);
-						//HexDump2("read_disable", res+28, 4);
-						fprintf(fd, "%d(0x%02x%02x%02x%02x) ",
-							handle->numCores[0], res[28], res[29], res[30], res[31]);
-
-						Btc08ResetHW( handle, 1 );
-						usleep(interval * 1000 * 1000);
-					}
-					fprintf(fd, "\t");
-					fflush(fd);
-				}
-				fprintf(fd, "\n");
-				sync();
-			}
-			Btc08ResetHW( handle, 1 );
-			fclose(fd);
+			BistWithDisable(interval, repeat_cnt);
 			break;
 		}
 
-		//	BIST & Disable 1 Core Test Mode
+		//	Enable 1 Core Position Test
 		case 4:
 		{
-			BTC08_HANDLE handle;
-			uint8_t res[32] = {0x00,};
-			unsigned int res_size = sizeof(res)/sizeof(res[0]);
+			EnableOneCorePosition( interval, repeat_cnt );
+			break;
+		}
 
-			printf("=====  BIST & Disable 1 Core Test Mode  =====\n");
-			printf("  Interval     : %dsec\n", interval );
-			printf("  Repeat Cnt   : %d\n",    repeat_cnt );
-			printf("============================\n");
-#if USE_BTC08_FPGA
-			handle = CreateBtc08(0);
-#else
-			//	create BTC08 instance into index 0/1. ( /dev/spidev0.0 or /dev/spidev2.0 )
-			if ((plug_status_0 == 1) && (plug_status_1 != 1)) {
-				handle = CreateBtc08(0);
-			} else if ((plug_status_0 != 1) && (plug_status_1 == 1)) {
-				handle = CreateBtc08(1);
-			}
-#endif
-			FILE *fd = fopen("/home/root/disable_1_core.log", "w");
-			if (!fd) {
-				NxDbgMsg(NX_DBG_ERR, "Failed to open disable_1_core.log");
-				return -1;
-			}
+		//
+		case 5:
+		{
+			AutoTestMining( interval, repeat_cnt );
+			break;
+		}
 
-			Btc08ResetHW( handle, 1 );
-			for (int pll_idx = 0; pll_idx < NUM_PLL_SET; pll_idx++)
-			{
-				int freq = GetPllIdx2Freq(pll_idx);
-				fprintf(fd, "%d\t", freq);
+		case 6:
+		{
+			DebugPowerBIST(freqM, interval);
+			break;
+		}
 
-				NxDbgMsg(NX_DBG_ERR, "1\n");
-				for (int core_idx=0; core_idx < BTC08_NUM_CORES; core_idx++)
-				{
-					gDisableCore = ~(1 << (core_idx % 8));
-					for (int cnt = 0; cnt < repeat_cnt; cnt++)
-					{
-						NxDbgMsg(NX_DBG_INFO, "freq:%d Disable Mask : 0x%08x 0x%08x(%d/%d)\n",
-							freq, (1 << (core_idx % 8)), gDisableCore, (cnt+1), repeat_cnt);
-						//	Make Reset State
-						TestBist( handle, disCore, freqM, 0);
-						// TODO:
-						Btc08ResetHW( handle, 1 );
-						usleep(interval * 1000 * 1000);
-					}
-					fprintf(fd, "\t");
-					fflush(fd);
-				}
-				fprintf(fd, "\n");
-				sync();
-			}
-			Btc08ResetHW( handle, 1 );
-			fclose(fd);
+		case 7:
+		{
+			MiningWithoutBist( freqM, isInfiniteMining );
 			break;
 		}
 

@@ -55,6 +55,7 @@ enum BTC08_cmd {
 	SPI_CMD_SET_CONTROL		= 0x12,	/* no response */
 	SPI_CMD_DEBUG           = 0x15,
 	SPI_CMD_WRITE_NONCE		= 0x16,
+	SPI_CMD_WRITE_CORE_CFG	= 0x17,
 	SPI_CMD_READ_DEBUGCNT	= 0x19,
 	SPI_CMD_READ_HASH		= 0x20,
 	SPI_CMD_WRITE_IO_CTRL   = 0x30,
@@ -794,6 +795,24 @@ int Btc08WriteNonce  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *startNonce, 
 
 	memcpy(handle->txBuf + txLen, startNonce, NONCE_LEN);	txLen += NONCE_LEN;
 	memcpy(handle->txBuf + txLen, endNonce  , NONCE_LEN);	txLen += NONCE_LEN;
+
+	_WriteDummy(handle, txLen);
+	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DUMMY_BYTES ) )
+	{
+		// SPI Error
+		NxDbgMsg(NX_DBG_ERR, "[%s] spi transfer error!!!\n", __FUNCTION__);
+		return -1;
+	}
+	return 0;
+}
+
+int Btc08WriteCoreCfg (BTC08_HANDLE handle, uint8_t chipId, uint8_t coreCnt )
+{
+	size_t txLen = 4;
+	handle->txBuf[0] = SPI_CMD_WRITE_CORE_CFG;
+	handle->txBuf[1] = chipId;
+	handle->txBuf[2] = coreCnt;
+	handle->txBuf[3] = 0;		// dummy
 
 	_WriteDummy(handle, txLen);
 	if( 0 > SpiTransfer( handle->hSpi, handle->txBuf, handle->rxBuf, txLen, DUMMY_BYTES ) )

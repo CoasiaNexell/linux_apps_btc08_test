@@ -52,7 +52,11 @@
 
 typedef struct tag_BTC08_INFO *BTC08_HANDLE;
 
+#if USE_BTC08_FPGA
+#define BTC08_NUM_CORES     1
+#else
 #define BTC08_NUM_CORES     30
+#endif
 #define MAX_JOB_FIFO        4
 #define JOB_ID_NUM_MASK     (MAX_JOB_FIFO*2-1)	/* total 7 */
 
@@ -143,6 +147,7 @@ int Btc08ReadJobId   (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t
 int Btc08ReadResult  (BTC08_HANDLE handle, uint8_t chipId, uint8_t* gn, uint8_t gn_size);
 int Btc08ClearOON    (BTC08_HANDLE handle, uint8_t chipId);
 int Btc08SetDisable  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *disable);
+int Btc08WriteCoreCfg(BTC08_HANDLE handle, uint8_t chipId, uint8_t coreCnt );
 int Btc08ReadDisable (BTC08_HANDLE handle, uint8_t chipId, uint8_t* res, uint8_t res_size);
 int Btc08SetControl  (BTC08_HANDLE handle, uint8_t chipId, uint32_t param);
 int Btc08WriteNonce  (BTC08_HANDLE handle, uint8_t chipId, uint8_t *startNonce, uint8_t *endNonce);

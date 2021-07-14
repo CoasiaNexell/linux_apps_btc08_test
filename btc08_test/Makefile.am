@@ -21,4 +21,5 @@ btc08_test_SOURCES = \
 	ScenarioTest.c \
 	TestVector.c \
 	TestFunction.c \
+	AutoTest.c \
 	main.c
