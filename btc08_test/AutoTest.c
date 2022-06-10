@@ -123,7 +123,7 @@ void BistWithDisable( int interval, int repeatCnt )
 			{
 				NxDbgMsg(NX_DBG_INFO, "\n## freq:%d disable_core:%d(%d/%d)\n", freq, (BTC08_NUM_CORES - core_num), (cnt+1), repeatCnt);
 				//	TestBist
-				TestBist(handle, (BTC08_NUM_CORES - core_num), freq, 0);
+				TestBist(handle, (BTC08_NUM_CORES - core_num), freq, 0, 200);
 				//	ReadDisable
 				Btc08ReadDisable(handle, 1, res, res_size);
 
@@ -283,7 +283,7 @@ void DebugPowerBIST( int freq, int interval )
 	while(1)
 	{
 		DbgGpioOff();
-		TestBist(handle, 0, freq, 0);
+		TestBist(handle, 0, freq, 0, 200);
 		usleep(interval * 1000 * 1000);
 	}
 	Btc08ResetHW( handle, 1 );

@@ -94,7 +94,7 @@ uint8_t start_small_nonce[4] = {
 };
 
 uint8_t end_small_nonce[4] = {
-	0x77, 0x00, 0x00, 0x00
+	0x6f, 0xff, 0xff, 0xff
 };
 
 typedef struct BLOCk_DATA_INFO {

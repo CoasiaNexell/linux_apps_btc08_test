@@ -94,8 +94,6 @@ enum BTC08_cmd {
 #define OON_IRQ_ENB			(1 << 4)
 #define LAST_CHIP_FLAG		(1 << 15)
 
-#define HW_RESET_TIME			(200000)		//	50 msec
-
 static void _WriteDummy(BTC08_HANDLE handle, int txlen)
 {
 	handle->txBuf[txlen+0] = 0;
