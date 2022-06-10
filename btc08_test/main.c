@@ -107,14 +107,17 @@ void print_usage( char *appname )
 	printf("\n------------------------------------------------------------------\n");
 	printf("usage : %s [options]\n", appname);
 	printf(" options : \n");
-	printf("   m [mode]          : mode (1(bist), 2(mining), other(console))\n");
-	printf("   f [frequency]     : freqeuncy in MHz (default : 24)\n");
-	printf("   c [disable cores] : disable cores (default : 0)\n");
-	printf("   d [bitmask]       : disable core bit mask\n");
-	printf("   i [interval]      : interval (default: 1sec)\n");
-	printf("   r [repeat]        : repeat (default: 1)\n");
-	printf("   l [infinite mining]: infinite mining (default: 0)\n");
-	printf("   n [0 or 1]        : 0(short range), 1(full range) (default : 0)\n");
+	printf("   m [mode]             : mode (1(bist), 2(mining), other(console))\n");
+	printf("   f [frequency]        : freqeuncy in MHz (default : 24)\n");
+	printf("   c [disable cores]    : disable cores (default : 0)\n");
+	printf("   d [bitmask]          : disable core bit mask\n");
+	printf("   i [interval]         : interval (default: 1sec)\n");
+	printf("   r [repeat]           : repeat (default: 1)\n");
+	printf("   l [infinite mining]  : infinite mining (default: 0)\n");
+	printf("   n [0 or 1]           : 0(short range), 1(full range) (default : 0)\n");
+	printf("   t [delay]            : delay after h/w reset (default : 200ms)\n");
+	printf("   L [lastChipid]       : last chip id number\n");
+	printf("   D [ASIC data]        : 0(different), 1(same)\n");
 	printf("------------------------------------------------------------------\n");
 	printf("example 1) auto bist\n");
 	printf(" btc08_test -m 3 -i 3 -r 5\n");
@@ -124,6 +127,10 @@ void print_usage( char *appname )
 	printf(" btc08_test -m 5 -i 3 -r 3\n");
 	printf("example 4) Mining test without BIST\n");
 	printf(" btc08_test -m 7 -l 1\n");
+	printf("example 5) Reset And Bist\n");
+	printf(" btc08_test -m 1 -t 3000 -c 0 -f 24\n");
+	printf("example 6) Different ASIC Data Test\n");
+	printf(" btc08_test -m 8 -L 1 -n 1 -c 0 -D 0\n");
 	printf("------------------------------------------------------------------\n");
 }
 
@@ -134,29 +141,35 @@ int main( int argc, char *argv[] )
 	int cmdCnt;
 	int opt;
 
-	int mode = -1;			//	Test Mode : -1 (Interlactive Mode)
-	int freqM = 24;			//	frequence in MHz : default 24 MHz
-	int disCore = 0;		//	disable core
-	int testIndex = 0;		//	Test Item : BIST
-	int isFullNonce = 0;	//	Nonce Range for testing : 0(short), 1 (full)
-	int repeat_cnt = 1;     //  Repeat cnt : 1
-	int interval = 1;       //  Interval
+	int mode = -1;				//	Test Mode : -1 (Interlactive Mode)
+	int freqM = 24;				//	frequence in MHz : default 24 MHz
+	int disCore = 0;			//	disable core
+	int testIndex = 0;			//	Test Item : BIST
+	int isFullNonce = 0;		//	Nonce Range for testing : 0(short), 1 (full)
+	int repeat_cnt = 1;     	//  Repeat cnt : 1
+	int interval = 1;       	//  Interval
 	int isInfiniteMining = 0;	// Infinite Mining: 0(default 4 jobs)
+	int delay = 200;			//	Set Delay
+	int last_chipId = 1;		//	Set Last ChipID
+	int is_diff_data = 0;		//	Different ASIC Data Test : 0(same), 1(Different)
 
-	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:d:r:l:h")))
+	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:d:r:l:t:L:D:h")))
 	{
 		switch (opt)
 		{
-		case 'm':	mode = atoi(optarg);			break;
-		case 'f':	freqM = atoi(optarg);			break;
-		case 'c':	disCore = atoi(optarg);			break;
-		case 'n':	isFullNonce = atoi(optarg);		break;
-		case 'r':	repeat_cnt = atoi(optarg);		break;
-		case 'i':	interval = atoi(optarg);		break;
-		case 'd':	gDisableCore = strtol(optarg, NULL, 16); break;
-		case 'l':	isInfiniteMining = atoi(optarg);		 break;
-		case 'h':	print_usage(argv[0]);			return 0;
-		default:	break;
+		case 'm':	mode = atoi(optarg);						break;
+		case 'f':	freqM = atoi(optarg);						break;
+		case 'c':	disCore = atoi(optarg);						break;
+		case 'n':	isFullNonce = atoi(optarg);					break;
+		case 'r':	repeat_cnt = atoi(optarg);					break;
+		case 'i':	interval = atoi(optarg);					break;
+		case 'd':	gDisableCore = strtol(optarg, NULL, 16);	break;
+		case 'l':	isInfiniteMining = atoi(optarg);			break;
+		case 't':	delay = atoi(optarg);						break;
+		case 'L':	last_chipId = atoi(optarg);					break;
+		case 'D':	is_diff_data = atoi(optarg);				break;
+		case 'h':	print_usage(argv[0]);						return 0;
+		default:												break;
 		}
 	}
 
@@ -178,6 +191,7 @@ int main( int argc, char *argv[] )
 			printf("=====  BIST Test Mode  =====\n");
 			printf("  Disable Core : %d ea\n", disCore);
 			printf("  Freqeyncy    : %dMHz\n", freqM );
+			printf("  Reset Delay  : %dms\n", delay );
 			printf("============================\n");
 #if USE_BTC08_FPGA
 			handle = CreateBtc08(0);
@@ -189,7 +203,7 @@ int main( int argc, char *argv[] )
 				handle = CreateBtc08(1);
 			}
 #endif
-			TestBist( handle, disCore, freqM, 0);
+			TestBist( handle, disCore, freqM, 0, delay);
 			//	Make Reset State
 			Btc08ResetHW( handle, 1 );
 			break;
@@ -209,13 +223,13 @@ int main( int argc, char *argv[] )
 				handle = CreateBtc08(1);
 			}
 #endif
-			printf("===== Mining Test Mode =====\n");
-			printf("  Disable Core : %d ea\n", disCore);
-			printf("  Freqeyncy    : %dMHz\n", freqM );
-			printf("  Nonce        : %s\n",  isFullNonce?"Full":"Short");
-			printf("  Disable Mask : 0x%08x\n", gDisableCore);
+			printf("========== Mining Test Mode ==========\n");
+			printf("  Disable Core    : %d ea\n", disCore);
+			printf("  Freqeyncy       : %dMHz\n", freqM );
+			printf("  Nonce           : %s\n",  isFullNonce?"Full":"Short");
+			printf("  Disable Mask    : 0x%08x\n", gDisableCore);
 			printf("  Infinite Mining : %d\n", isInfiniteMining);
-			printf("============================\n");
+			printf("======================================\n");
 			TestDisableCore( handle, disCore, freqM, isFullNonce, 0, isInfiniteMining );
 
 			//	Make Reset State
@@ -253,6 +267,22 @@ int main( int argc, char *argv[] )
 		case 7:
 		{
 			MiningWithoutBist( freqM, isInfiniteMining );
+			break;
+		}
+
+		// Different ASIC Data Test
+		case 8:
+		{
+			printf("========== Asic Test Mode ==========\n");
+			printf("  Last ChipID    : %d\n", last_chipId);
+			printf("  Disable Core   : %dea\n", disCore);
+			printf("  Disable Mask   : 0x%08x\n", gDisableCore);
+			printf("  Freqeyncy      : %dMHz\n", freqM );
+			printf("  Nonce          : %s\n",  isFullNonce?"Full":"Short");
+			printf("  ASIC Data      : %s\n", is_diff_data?"Same":"Different");
+			printf("======================================\n");
+
+			TestAsic(last_chipId, disCore, isFullNonce, is_diff_data, freqM);
 			break;
 		}
 

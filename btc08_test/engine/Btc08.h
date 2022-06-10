@@ -63,6 +63,7 @@ typedef struct tag_BTC08_INFO *BTC08_HANDLE;
 #define	SPI_MAX_TRANS	(1024)
 #define MAX_CHIPS		(32)
 #define MAX_CORES		(255)
+#define HW_RESET_TIME	(200000)		//	200 msec
 
 struct tag_BTC08_INFO{
 	GPIO_HANDLE		hReset;
