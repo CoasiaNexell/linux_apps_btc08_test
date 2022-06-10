@@ -24,6 +24,7 @@
 */
 #define BR_JOB_CMD_RESET     0
 #define CHIPID_JOB           0
+#define HW_RESET_TIME		200000	//	200 msec
 
 void TestReadDisable( BTC08_HANDLE handle );
 unsigned int gDisableCore = 0xffffffff;
@@ -35,7 +36,7 @@ static void singlecommand_command_list()
 	printf("  1. H/W Reset\n");
 	printf("  2. Reset and Auto Address \n");
 	printf("  3. Reset and TestBist\n");
-	printf("    ex > 3 [disable_core_num] [freq] [wait_gpio] (default: 3 0 24 0)\n");
+	printf("    ex > 3 [disable_core_num] [freq] [wait_gpio] [delay_ms] (default: 3 0 24 0 200)\n");
 	printf("  4. Set the chip to the last chip\n");
 	printf("    ex > 4 [chipId]\n");
 	printf("  5. Disable core\n");
@@ -809,7 +810,7 @@ void DbgGpioOff();
 #endif
 
 
-void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int wait_gpio )
+void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int wait_gpio, int delay )
 {
 	uint8_t *ret;
 	uint8_t res[4] = {0x00,};
@@ -860,8 +861,15 @@ void TestBist( BTC08_HANDLE handle, uint8_t disable_core_num, int pll_freq, int 
 
 	HexDump("[disable_cores]", disable_cores, 32);
 
-	Btc08ResetHW( handle, 1 );
-	Btc08ResetHW( handle, 0 );
+	GpioSetValue( handle->hReset, 0 );
+	usleep( HW_RESET_TIME );	//	wait 200ms
+	GpioSetValue( handle->hReset, 1 );
+	NxDbgMsg( NX_DBG_INFO, "H/W Reset Fisish\n");
+
+	if((delay*1000) < HW_RESET_TIME)
+		usleep( HW_RESET_TIME );
+	else
+		usleep( delay*1000 );
 
 	// AUTO_ADDRESS > READ_ID
 	handle->numChips = Btc08AutoAddress(handle);
@@ -1509,6 +1517,262 @@ static int TestReadVolTemp( BTC08_HANDLE handle )
 	return 0;
 }
 
+
+/**
+ * @brief Different ASIC Data Test
+ * 
+ * @param last_chipId Set last chip ID
+ * @param disable_core_num Set disable core number
+ * @param is_full_nonce 0(short range), 1(full range)
+ * @param is_diff_data 0(different), 1(same)
+ * @param pll_freq Set PLL frequency
+ */
+void TestAsic(uint8_t last_chipId, uint8_t disable_core_num, uint8_t is_full_nonce, uint8_t is_diff_data, int pll_freq)
+{
+	int chipId = 0x00, jobId=0x01;
+	struct timespec ts_start, ts_oon, ts_gn, ts_diff;
+	uint8_t fifo_full = 0x00, oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id =0x00;
+	uint8_t res[4] = {0x00,};
+	uint8_t disable_cores[32] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+	bool	ishashdone = false;
+	uint8_t hashdone_allchip[256];
+	uint8_t hashdone_chip[256];
+	BTC08_HANDLE handle;
+	BOARD_TYPE type = BOARD_TYPE_ASIC;
+	VECTOR_DATA data;
+
+	memset(hashdone_allchip, 0xFF, sizeof(hashdone_allchip));
+	memset(hashdone_chip,    0x00, sizeof(hashdone_chip));
+
+	tstimer_time(&ts_start);
+	NxDbgMsg(NX_DBG_INFO, "=== Start of TestWork! === [%ld.%lds]\n", ts_start.tv_sec, ts_start.tv_nsec);
+
+	// Seqeunce 1. Create Handle
+#if USE_BTC08_FPGA
+	handle = CreateBtc08(0);
+#else
+	if ((plug_status_0 == 1) && (plug_status_1 != 1))
+		handle = CreateBtc08(0);
+	else if ((plug_status_0 != 1) && (plug_status_1 == 1))
+		handle = CreateBtc08(1);
+#endif
+	if(!handle)
+	{
+		NxDbgMsg( NX_DBG_INFO, "Can not Create BTC08 Handler\n");
+		return;
+	}
+
+	// Sequence 2. Reset HW
+	Btc08ResetHW( handle, 1 );
+	Btc08ResetHW( handle, 0 );
+
+	// Sequence 3. Set ASIC Boost
+	handle->isAsicBoost = true;
+
+	// Seqeunce 4. Find number of chips : using AutoAddress
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_DEBUG, "%5s NumChips = %d\n", "", handle->numChips);
+	ReadId(handle);
+
+	// Sequence 5. Reset SW
+	Btc08Reset(handle, BCAST_CHIP_ID);
+
+	// Sequence 6. Set last chip
+	Btc08SetControl(handle, last_chipId, LAST_CHIP);
+	handle->numChips = Btc08AutoAddress(handle);
+	NxDbgMsg(NX_DBG_INFO, "%5s NumChips = %d\n", "", handle->numChips);
+	ReadId(handle);
+
+	// Sequence 7. Set Enable Cores
+	// Btc08SetDisable (handle, BCAST_CHIP_ID, golden_enable);
+	if (last_chipId != 0)
+	{
+		Btc08SetControl(handle, last_chipId, LAST_CHIP);
+		handle->numChips = Btc08AutoAddress(handle);
+		NxDbgMsg(NX_DBG_INFO, "(After last chip) NumChips = %d\n", handle->numChips);
+		ReadId(handle);
+	}
+
+	// Sequence 7. Enable all cores
+	if( gDisableCore != 0xffffffff )
+	{
+		//	Use user disable makse
+		memset(disable_cores, 0xff, 32);
+		disable_cores[28] = (gDisableCore >> 24) & 0xFF;
+		disable_cores[29] = (gDisableCore >> 16) & 0xFF;
+		disable_cores[30] = (gDisableCore >>  8) & 0xFF;
+		disable_cores[31] = (gDisableCore >>  0) & 0xFF;
+	}
+	else
+	{
+		if( disable_core_num > 0 )
+		{
+			memset(disable_cores, 0xff, 32);
+			disable_cores[31] &= ~(1);
+			for (int i=1; i<(BTC08_NUM_CORES-disable_core_num); i++) {
+				disable_cores[31-(i/8)] &= ~(1 << (i % 8));
+			}
+		}
+		else
+		{
+			memset(disable_cores, 0x00, 32);
+		}
+	}
+
+	if( gDisableCore != 0xffffffff )
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable cores : 0x%08x\n", gDisableCore);
+	else
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable %d cores\n", disable_core_num);
+	for (int chipId=1; chipId <= handle->numChips; chipId++) {
+		Btc08SetDisable (handle, chipId, disable_cores);
+	}
+
+	// Sequence 8. Set PLL Freq.
+	type = get_board_type(handle);
+	if (type == BOARD_TYPE_ASIC)
+	{
+		NxDbgMsg(NX_DBG_INFO, "[SET_PLL] Set PLL %d\n", pll_freq);
+		if (0 > SetPllFreq(handle, pll_freq))
+			return;
+	}
+
+	// Seqeunce 9. Run Bist Test
+	RunBist( handle );
+
+	// Sequence 10. Enable OON IRQ/Set UART divider
+	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
+
+	// Sequence 11. Get Golden Vector Data
+	GetGoldenVector(4, &data, 0);
+
+	// Seqeunce 12. Setting Parameters
+	if(!is_diff_data)
+	{
+		printf("test\n");
+		data.midState[32*1] += 1;
+		data.midState[32*2] += 2;
+		data.midState[32*3] += 3;
+	}
+	Btc08WriteParam(handle, BCAST_CHIP_ID, data.midState, data.parameter);
+
+	// Seqeunce 13. Setting Target Parameters
+	Btc08WriteTarget(handle, BCAST_CHIP_ID, data.target);
+
+	// Sequence 14. Setting Nonce Range
+	if(is_full_nonce)
+	{
+		DistributionNonce(handle, start_full_nonce, end_full_nonce);
+	}
+	else
+	{
+		DistributionNonce(handle, start_small_nonce, end_small_nonce);
+	}
+
+	for( int i=0; i<handle->numChips ; i++ )
+	{
+		NxDbgMsg(NX_DBG_INFO, "Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n", i, handle->numCores[i],
+			handle->startNonce[i][0], handle->startNonce[i][1], handle->startNonce[i][2], handle->startNonce[i][3],
+			handle->endNonce[i][0], handle->endNonce[i][1], handle->endNonce[i][2], handle->endNonce[i][3]);
+		Btc08WriteNonce(handle, i+1, handle->startNonce[i], handle->endNonce[i]);
+	}
+
+	NxDbgMsg( NX_DBG_INFO, "===== RUN JOB =====\n");
+
+	// Sequence 15. Run Job
+	Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
+
+	// Sequence 16. Check Interrupt Signals(GPIO) and Post Processing
+	while(!ishashdone)
+	{
+		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_GN))	// Check GN GPIO pin
+		{
+			Btc08ReadJobId(handle, BCAST_CHIP_ID, res, res_size);
+			gn_job_id  = res[1];
+			gn_irq 	  = res[2] & (1<<0);
+			chipId    = res[3];
+
+			if (0 != gn_irq) {				// In case of GN
+				// Check if found GN(0x66cb3426) is correct and submit nonce to pool server and then go loop again
+				tstimer_time(&ts_gn);
+				NxDbgMsg(NX_DBG_INFO, "%2s === GN IRQ on chip#%d for jobId#%d!!! === [%ld.%lds]\n",
+						"", chipId, gn_job_id, ts_gn.tv_sec, ts_gn.tv_nsec);
+
+				if (handleGN(handle, chipId, golden_nonce) < 0)
+				{
+					NxDbgMsg( NX_DBG_ERR, "=== GN Read fail!!! ==\n");
+					break;
+				}
+			} else {						// In case of not GN
+				NxDbgMsg(NX_DBG_INFO, "%2s === H/W interrupt occured, but GN_IRQ value is not set!\n", "");
+			}
+		}
+
+		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON
+		{
+#if CHECK_LAST_OON
+			Btc08ReadJobId(handle,  handle->numChips, res, res_size);
+			oon_job_id = res[0];
+			oon_irq	  = res[2] & (1<<1);
+			chipId    = res[3];
+
+			if (0 != oon_irq) {		// In case of OON
+				if (chipId == handle->numChips)		// OON occures on chip#1 > chip#2 > chip#3
+				{
+					tstimer_time(&ts_oon);
+					NxDbgMsg(NX_DBG_INFO, "%2s === OON IRQ on chip#%d for oon_jobId#%d!!! === [%ld.%lds]\n",
+							"", chipId, oon_job_id, ts_oon.tv_sec, ts_oon.tv_nsec);
+
+					int ret = handleOON(handle, BCAST_CHIP_ID);
+					ishashdone = true;
+				}
+			}
+#else
+			for (int i=1; i<=handle->numChips; i++)
+			{
+				Btc08ReadJobId(handle, i, res, res_size);
+				oon_job_id = res[0];
+				oon_irq	  = res[2] & (1<<1);
+				chipId    = res[3];
+
+				if (0 != oon_irq) {		// In case of OON
+					tstimer_time(&ts_oon);
+					NxDbgMsg(NX_DBG_INFO, "%2s === OON IRQ on chip#%d for oon_jobId#%d!!! === [%ld.%lds]\n",
+							"", chipId, oon_job_id, ts_oon.tv_sec, ts_oon.tv_nsec);
+
+					if (oon_job_id == (jobId-1))
+						hashdone_chip[chipId-1] = 0xFF;
+
+					int ret = handleOON(handle, i);
+					if ((ret == 0) && (oon_job_id == (jobId-1)))
+					{
+						int result = memcmp(hashdone_chip, hashdone_allchip, sizeof(uint8_t) * handle->numChips);
+						if (result == 0)
+						{
+							ishashdone = true;
+							break;
+						}
+					}
+				} else {				// In case of not OON
+					//NxDbgMsg(NX_DBG_INFO, "%2s === OON IRQ is not set!\n", "");
+					// if oon timeTestWorkLoop_JobDist
+				}
+			}
+#endif
+		}
+		sched_yield();
+	}
+
+	tstimer_diff(&ts_oon, &ts_start, &ts_diff);
+
+	NxDbgMsg(NX_DBG_INFO, "=== End of TestWork === [%ld.%lds]\n", ts_diff.tv_sec, ts_diff.tv_nsec);
+
+	// The expected hashrate = 600 mhash/sec [MinerCoreClk(50MHz) * NumOfCores(3cores) * AsicBoost(4sub-cores)]
+	calc_hashrate(handle->isAsicBoost, (jobId-1), &ts_diff);
+
+	DestroyBtc08( handle );
+}
+
 void SingleCommandLoop(void)
 {
 	static char cmdStr[NX_SHELL_MAX_ARG * NX_SHELL_MAX_STR];
@@ -1558,6 +1822,7 @@ void SingleCommandLoop(void)
 			uint8_t disable_core_num = 0;
 			int pll_freq = 24;
 			int wait_gpio = 0;
+			int delay = 200;
 			if( cmdCnt > 1 )
 			{
 				disable_core_num = strtol(cmd[1], 0, 10);
@@ -1570,9 +1835,13 @@ void SingleCommandLoop(void)
 			{
 				wait_gpio = strtol(cmd[3], 0, 10);
 			}
+			if( cmdCnt > 4 )
+			{
+				delay = strtol(cmd[4], 0, 10);
+			}
 			printf("disable_core_num = %d, pll_freq = %d, wait_gpio = %d\n",
 					disable_core_num, pll_freq, wait_gpio);
-			TestBist( handle, disable_core_num, pll_freq, wait_gpio );
+			TestBist( handle, disable_core_num, pll_freq, wait_gpio, delay );
 		}
 		//----------------------------------------------------------------------
 		//	Set the chip as the last chip
