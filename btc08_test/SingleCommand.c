@@ -354,9 +354,7 @@ static int RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce, uint8_t is_infinit
 					}
 					jobId++;
 #else
-					DbgGpioOn();
 					Btc08RunJob(handle, BCAST_CHIP_ID, (handle->isAsicBoost ? ASIC_BOOST_EN:0x00), jobId++);
-					DbgGpioOff();
 #endif
 					if (jobId == 256)
 						jobId = 0;
@@ -366,6 +364,7 @@ static int RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce, uint8_t is_infinit
 		}		// end of if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))
 		sched_yield();
 	}
+	DbgGpioOff();
 
 	if (0 == is_infinite_mining)
 	{
@@ -656,6 +655,8 @@ int TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 	Btc08ResetHW( handle, 1 );
 	Btc08ResetHW( handle, 0 );
 
+	DbgGpioOff();
+
 	// seq1. AUTO_ADDRESS > READ_ID
 	handle->numChips = Btc08AutoAddress(handle);
 	NxDbgMsg(NX_DBG_INFO, "[AUTO_ADDRESS] NumChips = %d\n", handle->numChips);
@@ -687,8 +688,10 @@ int TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 
 	// seq6. RUN_BIST > READ_BIST
 	NxDbgMsg(NX_DBG_INFO, "[RUN_BIST]\n");
+	DbgGpioOn();
 	Btc08RunBist(handle, BCAST_CHIP_ID, default_golden_hash, default_golden_hash,
 				default_golden_hash, default_golden_hash);
+	DbgGpioOff();
 	ReadBist(handle);
 
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
@@ -719,6 +722,7 @@ int TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 	}
 
 	// seq8. WRITE_PARAM, WRITE_NONCE > RUN_JOB
+	DbgGpioOn();
 	return RunJob(handle, is_full_nonce, is_infinite_mining);
 }
 
