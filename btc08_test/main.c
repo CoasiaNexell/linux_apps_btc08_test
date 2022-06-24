@@ -21,6 +21,8 @@
 #define NX_DTAG "[MAIN]"
 #include "NX_DbgMsg.h"
 
+extern unsigned int gSPIMode;
+
 static void l1_command_liist()
 {
 	printf("\n\n");
@@ -118,6 +120,7 @@ void print_usage( char *appname )
 	printf("   t [delay]            : delay after h/w reset (default : 200ms)\n");
 	printf("   L [lastChipid]       : last chip id number\n");
 	printf("   D [ASIC data]        : 0(different), 1(same)\n");
+	printf("   s [spi mode]         : spi mode (default:0, 0~3 )\n");
 	printf("------------------------------------------------------------------\n");
 	printf("example 1) auto bist\n");
 	printf(" btc08_test -m 3 -i 3 -r 5\n");
@@ -129,10 +132,13 @@ void print_usage( char *appname )
 	printf(" btc08_test -m 7 -l 1\n");
 	printf("example 5) Reset And Bist\n");
 	printf(" btc08_test -m 1 -t 3000 -c 0 -f 24\n");
-	printf("example 6) Different ASIC Data Test\n");
-	printf(" btc08_test -m 8 -L 1 -n 1 -c 0 -D 0\n");
+	printf("example 6) Disable Core Test\n");
+	printf(" btc08_test -m 2 -n 0 -c 0 -f 24\n");
+	printf("example 7) Different ASIC Data Test\n");
+	printf(" btc08_test -m 8 -L 1 -n 1 -c 0 -D 0 -f 24\n");
 	printf("------------------------------------------------------------------\n");
 }
+
 
 int main( int argc, char *argv[] )
 {
@@ -153,7 +159,7 @@ int main( int argc, char *argv[] )
 	int last_chipId = 1;		//	Set Last ChipID
 	int is_diff_data = 0;		//	Different ASIC Data Test : 0(same), 1(Different)
 
-	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:d:r:l:t:L:D:h")))
+	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:d:r:l:t:L:D:s:h")))
 	{
 		switch (opt)
 		{
@@ -168,6 +174,7 @@ int main( int argc, char *argv[] )
 		case 't':	delay = atoi(optarg);						break;
 		case 'L':	last_chipId = atoi(optarg);					break;
 		case 'D':	is_diff_data = atoi(optarg);				break;
+		case 's':	gSPIMode = atoi(optarg);					break;
 		case 'h':	print_usage(argv[0]);						return 0;
 		default:												break;
 		}

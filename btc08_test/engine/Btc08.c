@@ -34,6 +34,8 @@
 
 #define DEBUG_RESULT	0
 
+unsigned int gSPIMode = 0;
+
 enum BTC08_cmd {
 	SPI_CMD_READ_ID			= 0x00,
 	SPI_CMD_AUTO_ADDRESS	= 0x01,
@@ -112,9 +114,11 @@ BTC08_HANDLE CreateBtc08( int32_t index )
 	GPIO_HANDLE hGn = NULL;
 	GPIO_HANDLE hKey0 = NULL;
 
+	NxDbgMsg(NX_DBG_INFO, "Set SPI Mode : %d\n", gSPIMode);
+
 	if( index == 0 )
 	{
-		hSpi = CreateSpi( "/dev/spidev0.0", 0, TX_RX_MAX_SPEED, 0, 8 );
+		hSpi = CreateSpi( "/dev/spidev0.0", gSPIMode, TX_RX_MAX_SPEED, 0, 8 );
 		gpioReset = GPIO_RESET_0;
 		gpioOon   = GPIO_IRQ_OON_0;
 		gpioGn    = GPIO_IRQ_GN_0;
@@ -122,7 +126,7 @@ BTC08_HANDLE CreateBtc08( int32_t index )
 	}
 	else if( index == 1 )
 	{
-		hSpi = CreateSpi( "/dev/spidev2.0", 0, TX_RX_MAX_SPEED, 0, 8 );
+		hSpi = CreateSpi( "/dev/spidev2.0", gSPIMode, TX_RX_MAX_SPEED, 0, 8 );
 		gpioReset = GPIO_RESET_1;
 		gpioOon   = GPIO_IRQ_OON_1;
 		gpioGn    = GPIO_IRQ_GN_1;
