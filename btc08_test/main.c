@@ -119,8 +119,10 @@ void print_usage( char *appname )
 	printf("   n [0 or 1]           : 0(short range), 1(full range) (default : 0)\n");
 	printf("   t [delay]            : delay after h/w reset (default : 200ms)\n");
 	printf("   L [lastChipid]       : last chip id number\n");
-	printf("   D [ASIC data]        : 0(different), 1(same)\n");
+	printf("   D [ASIC data]        : 0(Different), 1(same)\n");
+	printf("   R [nonce range]      : 0(Distribution), 1(same)\n");
 	printf("   s [spi mode]         : spi mode (default:0, 0~3 )\n");
+	printf("   v [debug level]      : debug level (default:%d, %d~%d )\n", gNxFilterDebugLevel, NX_DBG_VBS, NX_DBG_ERR );
 	printf("------------------------------------------------------------------\n");
 	printf("example 1) auto bist\n");
 	printf(" btc08_test -m 3 -i 3 -r 5\n");
@@ -135,10 +137,11 @@ void print_usage( char *appname )
 	printf("example 6) Disable Core Test\n");
 	printf(" btc08_test -m 2 -n 0 -c 0 -f 24\n");
 	printf("example 7) Different ASIC Data Test\n");
-	printf(" btc08_test -m 8 -L 1 -n 1 -c 0 -D 0 -f 24\n");
+	printf(" btc08_test -m 8 -n 1 -c 0 -D 0 -f 24\n");
+	printf("example 8) Change Frequency Mode\n");
+	printf(" btc08_test -m 9 -n 1 -c 0 -R 0 -f 24\n");
 	printf("------------------------------------------------------------------\n");
 }
-
 
 int main( int argc, char *argv[] )
 {
@@ -157,9 +160,10 @@ int main( int argc, char *argv[] )
 	int isInfiniteMining = 0;	// Infinite Mining: 0(default 4 jobs)
 	int delay = 200;			//	Set Delay
 	int last_chipId = 1;		//	Set Last ChipID
-	int is_diff_data = 0;		//	Different ASIC Data Test : 0(same), 1(Different)
+	int is_diff_data = 1;		//	Different ASIC Data : 0(Different), 1(same)
+	int is_diff_range = 0;		//	Distribution Nonce Range : 0(Distribution), 1(same)
 
-	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:d:r:l:t:L:D:s:h")))
+	while (-1 != (opt = getopt(argc, argv, "m:f:c:i:n:d:r:l:t:L:D:s:R:v:h")))
 	{
 		switch (opt)
 		{
@@ -175,6 +179,8 @@ int main( int argc, char *argv[] )
 		case 'L':	last_chipId = atoi(optarg);					break;
 		case 'D':	is_diff_data = atoi(optarg);				break;
 		case 's':	gSPIMode = atoi(optarg);					break;
+		case 'R':	is_diff_range = atoi(optarg);				break;
+		case 'v':	NxChgFilterDebugLevel(atoi(optarg));		break;
 		case 'h':	print_usage(argv[0]);						return 0;
 		default:												break;
 		}
@@ -287,9 +293,15 @@ int main( int argc, char *argv[] )
 			printf("  Freqeyncy      : %dMHz\n", freqM );
 			printf("  Nonce          : %s\n",  isFullNonce?"Full":"Short");
 			printf("  ASIC Data      : %s\n", is_diff_data?"Same":"Different");
-			printf("======================================\n");
+			printf("====================================\n");
 
 			TestAsic(last_chipId, disCore, isFullNonce, is_diff_data, freqM);
+			break;
+		}
+
+		case 9:
+		{
+			SingleCommandLoop_freq(disCore, isFullNonce, is_diff_range, freqM);
 			break;
 		}
 

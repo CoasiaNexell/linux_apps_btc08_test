@@ -24,6 +24,7 @@
 #include <GpioControl.h>
 #include <Spi.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #include "PllCtrl.h"
 #include "TestVector.h"
@@ -65,7 +66,7 @@ typedef struct tag_BTC08_INFO *BTC08_HANDLE;
 #define MAX_CORES		(255)
 #define HW_RESET_TIME	(200000)		//	200 msec
 
-struct tag_BTC08_INFO{
+struct tag_BTC08_INFO {
 	GPIO_HANDLE		hReset;
 	GPIO_HANDLE		hGn;
 	GPIO_HANDLE		hOon;
@@ -87,6 +88,20 @@ struct tag_BTC08_INFO{
 
 	uint8_t			txBuf[SPI_MAX_TRANS];
 	uint8_t			rxBuf[SPI_MAX_TRANS];
+};
+
+struct BTC08_INFO {
+	BTC08_HANDLE handle;
+
+	uint8_t disable_core_num;
+	uint8_t is_full_nonce;
+	uint8_t is_diff_range;
+	int pll_freq;
+
+	bool isDone;
+
+	pthread_t hThread;
+	pthread_mutex_t lock;
 };
 
 typedef enum {

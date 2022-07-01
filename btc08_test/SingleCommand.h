@@ -17,4 +17,6 @@ int TestMiningWithoutBist( BTC08_HANDLE handle, uint8_t disable_core_num,
 void TestAsic(uint8_t last_chipId, uint8_t disable_core_num, uint8_t is_full_nonce, uint8_t is_diff_data, int pll_freq);
 extern unsigned int gDisableCore;
 
+void SingleCommandLoop_freq(uint8_t disCore, uint8_t isFullNonce, uint8_t isDiffRange, int32_t freqM);
+
 #endif // _SINGLECOMMAND_H_

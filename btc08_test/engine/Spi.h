@@ -22,8 +22,8 @@
 
 #include <stdint.h>
 
-#define TX_RX_MAX_SPEED      (2 * 1000 * 1000)     //  1 MHz
-#define TX_MAX_SPEED        (10 * 1000 * 1000)     //  10 MHz
+#define TX_RX_MAX_SPEED      (2 * 1000 * 1000)     //  2 MHz
+#define TX_MAX_SPEED        (2 * 1000 * 1000)     //  2 MHz
 
 typedef struct tag_SPI_INFO *SPI_HANDLE;
 

@@ -31,6 +31,6 @@ uint32_t gNxFilterDebugLevel = NX_DBG_INFO;
 //------------------------------------------------------------------------------
 void NxChgFilterDebugLevel( uint32_t level )
 {
-	NxDbgMsg( NX_DBG_VBS, "%s : Change debug level %d to %d.\n", __FUNCTION__, gNxFilterDebugLevel, level );
+	NxDbgMsg( NX_DBG_INFO, "%s : Change debug level %d to %d.\n", __FUNCTION__, gNxFilterDebugLevel, level );
 	gNxFilterDebugLevel = level;
 }

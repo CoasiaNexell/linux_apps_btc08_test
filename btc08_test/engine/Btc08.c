@@ -114,7 +114,7 @@ BTC08_HANDLE CreateBtc08( int32_t index )
 	GPIO_HANDLE hGn = NULL;
 	GPIO_HANDLE hKey0 = NULL;
 
-	NxDbgMsg(NX_DBG_INFO, "Set SPI Mode : %d\n", gSPIMode);
+	NxDbgMsg(NX_DBG_DEBUG, "Set SPI Mode : %d\n", gSPIMode);
 
 	if( index == 0 )
 	{
@@ -1143,7 +1143,7 @@ int SetPllFreq(BTC08_HANDLE handle, int freq)
 		NxDbgMsg(NX_DBG_ERR, "Failed due to unknown PLL Freq(%d)!!!\n", freq);
 		return -1;
 	} else {
-		NxDbgMsg(NX_DBG_INFO, "pll_idx:%d freq:%d\n", pll_idx, freq);
+		NxDbgMsg(NX_DBG_DEBUG, "pll_idx:%d freq:%d\n", pll_idx, freq);
 	}
 
 	for (int chipId = 1; chipId <= handle->numChips; chipId++)
@@ -1176,7 +1176,7 @@ void ReadId(BTC08_HANDLE handle)
 					chipId, res[3]);
 		}
 	}
-	NxDbgMsg(NX_DBG_INFO, "[READ_ID] Active NumChips = %d\n", active_chips);
+	NxDbgMsg(NX_DBG_DEBUG, "[READ_ID] Active NumChips = %d\n", active_chips);
 }
 
 BOARD_TYPE get_board_type(BTC08_HANDLE handle)
@@ -1206,7 +1206,7 @@ void ReadBist(BTC08_HANDLE handle)
 			if ( (ret[0] & 1) == 0 )
 				break;
 			else
-				NxDbgMsg( NX_DBG_INFO, "[READ_BIST] ChipId = %d, Status = %s, NumCores = %d\n",
+				NxDbgMsg( NX_DBG_DEBUG, "[READ_BIST] ChipId = %d, Status = %s, NumCores = %d\n",
 						chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
 
 			usleep( 300 );
@@ -1215,7 +1215,7 @@ void ReadBist(BTC08_HANDLE handle)
 		ret = Btc08ReadBist(handle, chipId);
 
 		handle->numCores[chipId-1] = ret[1];
-		NxDbgMsg( NX_DBG_INFO, "[READ_BIST] ChipId = %d, Status = %s, NumCores = %d\n",
+		NxDbgMsg( NX_DBG_DEBUG, "[READ_BIST] ChipId = %d, Status = %s, NumCores = %d\n",
 					chipId, (ret[0]&1) ? "BUSY":"IDLE", ret[1] );
 	}
 }
@@ -1226,7 +1226,7 @@ void RunBist(BTC08_HANDLE handle)
 	uint8_t res[4] = {0x00,};
 	unsigned int res_size = sizeof(res)/sizeof(res[0]);
 
-	NxDbgMsg(NX_DBG_INFO, "=== RUN BIST ==\n");
+	NxDbgMsg(NX_DBG_DEBUG, "=== RUN BIST ==\n");
 
 	Btc08WriteParam (handle, BCAST_CHIP_ID, default_golden_midstate, default_golden_data);
 	Btc08WriteTarget(handle, BCAST_CHIP_ID, default_golden_target);
@@ -1260,7 +1260,7 @@ void DistributionNonce(BTC08_HANDLE handle, uint8_t start_nonce[4], uint8_t end_
 		}
 		totalCores += handle->numCores[i];
 	}
-	NxDbgMsg(NX_DBG_INFO, "Total Cores = %d\n", totalCores );
+	NxDbgMsg(NX_DBG_DEBUG, "Total Cores = %d\n", totalCores );
 
 	noncePerCore = nonce_diff / totalCores;
 	NxDbgMsg(NX_DBG_DEBUG, "startNonce=0x%08x(%d) endNonce = 0x%08x, nonce_diff = 0x%08x, noncePerCore = 0x%08x\n",
