@@ -60,6 +60,7 @@ typedef struct tag_BTC08_INFO *BTC08_HANDLE;
 #endif
 #define MAX_JOB_FIFO        4
 #define JOB_ID_NUM_MASK     (MAX_JOB_FIFO*2-1)	/* total 7 */
+#define MAX_JOB_INDEX		7
 
 #define	SPI_MAX_TRANS	(1024)
 #define MAX_CHIPS		(32)
@@ -96,11 +97,23 @@ struct BTC08_INFO {
 	uint8_t disable_core_num;
 	uint8_t is_full_nonce;
 	uint8_t is_diff_range;
+	uint8_t chipId;
+	uint8_t idx_data;
 	int pll_freq;
 
-	bool isDone;
+	uint8_t jobId;
+	uint8_t numChips;
+	bool chip_enable[MAX_CHIPS];
+	bool chip_isdone[MAX_CHIPS];
+	uint8_t chip_isFullNonce[MAX_CHIPS];
+	uint8_t chip_disCores[MAX_CHIPS];
+	VECTOR_DATA chip_data[MAX_CHIPS];
 
-	pthread_t hThread;
+	bool isDone;
+	uint32_t numGN;
+	uint32_t numOON;
+
+	pthread_t pThread;
 	pthread_mutex_t lock;
 };
 

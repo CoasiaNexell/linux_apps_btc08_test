@@ -289,10 +289,10 @@ void DebugPowerBIST( int freq, int interval )
 	Btc08ResetHW( handle, 1 );
 }
 
-void MiningWithoutBist( int interval, int freq )
+void MiningWithoutBist( uint8_t disable_core_num, uint32_t pll_freq,
+		uint8_t is_full_nonce, uint8_t fault_chip_id, uint8_t is_infinite_mining )
 {
 	BTC08_HANDLE handle;
-	int isFullNonce = 1;
 
 #if USE_BTC08_FPGA
 	handle = CreateBtc08(0);
@@ -314,7 +314,8 @@ void MiningWithoutBist( int interval, int freq )
 		usleep(interval * 1000 * 1000);
 	}
 #else
-	TestMiningWithoutBist( handle, 0, freq, isFullNonce, 0, 1 );
+	TestMiningWithoutBist( handle, disable_core_num, pll_freq, is_full_nonce,
+			fault_chip_id, is_infinite_mining );
 
 #endif
 

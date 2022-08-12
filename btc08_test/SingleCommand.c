@@ -79,6 +79,22 @@ static void singlecommand_command_list2()
 	printf("cmd > ");
 }
 
+static void singlecommand_command_list3()
+{
+	printf("\n");
+	printf("===================== Enable Chip Test Command =====================\n");
+	printf("  start <chipId> <disCore> <isFullNonce> <idx_data>  : Start\n");
+	printf("  enable <chipId> <disCore> <isFullNonce> <idx_data> : Enable chip\n");
+	printf("  disable <chipId>                                   : Disable chip\n");
+	printf("  stop                                               : quit\n");
+	printf("--------------------------------------------------------------------\n");
+	printf("  ex) start 1 0 0 4\n");
+	printf("  ex) enable 3 0 0 6\n");
+	printf("  ex) disable 1\n");
+	printf("====================================================================\n");
+	printf("cmd > ");
+}
+
 static int handleOON(BTC08_HANDLE handle, uint8_t chipId)
 {
 	int ret = 0;
@@ -251,7 +267,7 @@ static int RunJob(BTC08_HANDLE handle, uint8_t is_full_nonce, uint8_t is_infinit
 #endif
 		ReadId(handle);
 	}
-
+	DbgGpioOn();
 	startTime = get_current_ms();
 	prevTime = startTime;
 
@@ -711,7 +727,6 @@ int TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 				default_golden_hash, default_golden_hash);
 	DbgGpioOff();
 	ReadBist(handle);
-
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));
 
 	// seq7. Last chip test
@@ -728,6 +743,8 @@ int TestDisableCore( BTC08_HANDLE handle, uint8_t disable_core_num,
 		NxDbgMsg(NX_DBG_INFO, "[PLL_FOUT_EN] PLL_DISABLE chip#1\n");
 		Btc08SetPllFoutEn(handle, 1, FOUT_EN_DISABLE);
 	}
+
+	Btc08SetControl(handle, 1, (LAST_CHIP | OON_IRQ_EN | UART_DIVIDER));
 
 	for( int i=0 ; i<handle->numChips ; i++ )
 	{
@@ -785,6 +802,7 @@ int TestMiningWithoutBist( BTC08_HANDLE handle, uint8_t disable_core_num,
 
 	Btc08ResetHW( handle, 1 );
 	Btc08ResetHW( handle, 0 );
+	DbgGpioOff();
 
 	// seq1. AUTO_ADDRESS > READ_ID
 	handle->numChips = Btc08AutoAddress(handle);
@@ -815,6 +833,31 @@ int TestMiningWithoutBist( BTC08_HANDLE handle, uint8_t disable_core_num,
 		Btc08WriteCoreCfg(handle, chipId, (BTC08_NUM_CORES - disable_core_num));
 	}
 	Btc08SetControl(handle, BCAST_CHIP_ID, (OON_IRQ_EN | UART_DIVIDER));		// SoC example: 32'h0000_0011
+
+	if (1 <= handle->fault_chip_id)
+	{
+		for (int i = 0; i < (handle->fault_chip_id - 1); i++)
+		{
+			NxDbgMsg(NX_DBG_INFO, "[SET_CONTROL] set last chip(chip#2)\n");
+			Btc08SetControl(handle, 2, (LAST_CHIP | OON_IRQ_EN | UART_DIVIDER));
+			handle->numChips = Btc08AutoAddress(handle);
+			NxDbgMsg(NX_DBG_INFO, "[AUTO_ADDRESS] NumChips = %d\n", handle->numChips);
+			ReadId(handle);
+		}
+		NxDbgMsg(NX_DBG_INFO, "[PLL_FOUT_EN] PLL_DISABLE chip#1\n");
+		Btc08SetPllFoutEn(handle, 1, FOUT_EN_DISABLE);
+	}
+
+	Btc08SetControl(handle, 1, (LAST_CHIP | OON_IRQ_EN | UART_DIVIDER));
+
+	// seq3. SET_DISABLE
+	if( gDisableCore != 0xffffffff )
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable cores : 0x%08x\n", gDisableCore);
+	else
+		NxDbgMsg( NX_DBG_INFO, "[SET_DISABLE] Disable %d cores\n", disable_core_num);
+	for (int chipId=1; chipId <= handle->numChips; chipId++) {
+		Btc08SetDisable (handle, chipId, disable_cores);
+	}
 
 	// seq5. WRITE_PARAM, WRITE_NONCE > RUN_JOB
 	DbgGpioOff();
@@ -2080,6 +2123,319 @@ static void TestWork_Change_freq(struct BTC08_INFO *btc08_info, int freq)
 	DbgGpioOn();
 }
 
+/**
+ * @brief Initialize Target Board
+ * @date 2022.08.11
+ * @author dnjsdlf5400@coasia.com
+ * 
+ * @param btc08_info Data structure to store
+ * @return int 0(Success), -1(Error:Freqency), -2(Error:Active Cores)
+ */
+static int InitBTC08_INFO(struct BTC08_INFO *btc08_info)
+{
+	BTC08_HANDLE handle = btc08_info->handle;
+	uint8_t disable_cores[32] = {0x00,};
+	uint16_t allCores = 0;
+	BOARD_TYPE type = BOARD_TYPE_ASIC;
+
+	NxDbgMsg(NX_DBG_INFO, "\n=== Init Board Status ====\n");
+
+	// Step 1. Reset HW
+	Btc08ResetHW( handle, 1 );
+	Btc08ResetHW( handle, 0 );
+	DbgGpioOff();
+
+	// Step 2. Set ASIC Boost
+	handle->isAsicBoost = true;
+
+	// Step 3. Find All chips
+	handle->numChips = Btc08AutoAddress(handle);
+	btc08_info->numChips = handle->numChips;
+	NxDbgMsg(NX_DBG_DEBUG, "[Init] NumChips = %d\n", handle->numChips);
+	ReadId(handle);
+
+	// Step 4. Reset SW
+	Btc08Reset(handle, BCAST_CHIP_ID);
+
+	// Step 5. Set last chip
+	Btc08SetControl(handle, 1, (LAST_CHIP | OON_IRQ_EN | UART_DIVIDER));
+	handle->numChips = Btc08AutoAddress(handle);
+	btc08_info->numChips = handle->numChips;
+	NxDbgMsg(NX_DBG_INFO, "NumChips     : %d\n", handle->numChips);
+	ReadId(handle);
+
+	// Step 6. Set Enable All Cores
+	for (int i = 0; i < handle->numChips; i++)
+	{
+		Btc08SetDisable (handle, i + 1, disable_cores);
+	}
+
+	// Step 7. Set PLL Freq.
+	type = get_board_type(handle);
+	if (type == BOARD_TYPE_ASIC)
+	{
+		if (0 > SetPllFreq(handle, btc08_info->pll_freq))
+		{
+			NxDbgMsg(NX_DBG_INFO, "Error : Can not change pll frequency\n");
+			return -1;
+		}
+	}
+	NxDbgMsg(NX_DBG_INFO, "PLL          : %d Mhz\n", btc08_info->pll_freq);
+
+	// Step 8. Run Bist
+	DbgGpioOn();
+	RunBist(handle);
+	DbgGpioOff();
+
+	// Step 9. Check All Cores
+	for(int i = 0; i < handle->numChips; i++)
+	{
+		allCores += (uint16_t)handle->numCores[i];
+	}
+	NxDbgMsg(NX_DBG_INFO, "Active Cores : [%3d/%3d]\n", allCores, handle->numChips * BTC08_NUM_CORES);
+	if(allCores != handle->numChips * BTC08_NUM_CORES)
+	{
+		return -2;
+	}
+
+	// Step 10. Enable OON IRQ/Set UART divider
+	for(int i = 1; i < handle->numChips; i++)
+	{
+		Btc08SetControl(handle, i + 1, (OON_IRQ_EN | UART_DIVIDER));
+	}
+
+	// Step 11. Initiaize BTC08_INFO data (chip_*[]...)
+	for(int i = 0; i < MAX_CHIPS; i++)
+	{
+		btc08_info->chip_enable[i] = false;
+		btc08_info->chip_isdone[i] = true;
+		btc08_info->chip_isFullNonce[i] = 1;
+		btc08_info->chip_disCores[i] = 0;
+	}
+
+	btc08_info->jobId = 0;
+	btc08_info->numGN = 0;
+	btc08_info->numOON = 0;
+
+	NxDbgMsg(NX_DBG_INFO, "=========================\n\n");
+
+	return 0;
+}
+
+/**
+ * @brief Set the BTC08_INFO and runjob
+ * @date 2022.08.11
+ * @author dnjsdlf5400@coasia.com
+ * 
+ * @param btc08_info Data structure to store
+ * @return int 0(Success), -1(Error:Wrong chipId)
+ */
+static int SetBTC08_INFO(struct BTC08_INFO *btc08_info)
+{
+	BTC08_HANDLE handle = btc08_info->handle;
+	uint8_t disable_cores[32] = {0x00,};
+	uint8_t chipId = btc08_info->chipId;
+
+	pthread_mutex_lock(&btc08_info->lock);
+
+	// Step 1. Check chipId
+	if(btc08_info->chip_enable[chipId])
+	{
+		pthread_mutex_unlock(&btc08_info->lock);
+		return -1;
+	}
+	
+	// Step 2. Set BTC08_INFO data (chip_*[]...)
+	btc08_info->chip_enable[chipId] = true;
+	btc08_info->chip_isdone[chipId] = false;
+	btc08_info->chip_isFullNonce[chipId] = btc08_info->is_full_nonce;
+	btc08_info->chip_disCores[chipId] = btc08_info->disable_core_num;
+
+	// Step 3. Set Disable core (Only N chip)
+	if(btc08_info->chip_disCores[chipId] > 0)
+	{
+		memset(disable_cores, 0xff, 32);
+		disable_cores[31] &= ~(1);
+		for(int i = 1; i < (BTC08_NUM_CORES - btc08_info->chip_disCores[chipId]); i++) {
+			disable_cores[31 - (i / 8)] &= ~(1 << (i % 8));
+		}
+	}
+	else
+	{
+		memset(disable_cores, 0x00, 32);
+	}
+
+	for (int i = 0; i < btc08_info->numChips; i++)
+	{
+		Btc08SetDisable (handle, i + 1, disable_cores);
+	}
+
+	// Step 4. Get Golden Vector Data (Only N chip)
+	GetGoldenVector(btc08_info->idx_data, &btc08_info->chip_data[chipId], 0);
+
+	// Step 5. Setting Parameters (Only N chip)
+	Btc08WriteParam(handle, chipId, btc08_info->chip_data[chipId].midState, btc08_info->chip_data[chipId].parameter);
+
+	// Step 6. Setting Target Parameters (Only N chip)
+	Btc08WriteTarget(handle, chipId, btc08_info->chip_data[chipId].target);
+
+	// Step 7. Setting Nonce Range (Only N chip)
+	if(btc08_info->is_full_nonce)
+	{
+		NxDbgMsg(NX_DBG_INFO, "==> Enable Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n",
+				chipId, handle->numCores[chipId - 1] - btc08_info->chip_disCores[chipId],
+				start_full_nonce[0], start_full_nonce[1], start_full_nonce[2], start_full_nonce[3],
+				end_full_nonce[0],end_full_nonce[1], end_full_nonce[2], end_full_nonce[3]);
+		Btc08WriteNonce(handle, chipId, start_full_nonce, end_full_nonce);
+	}
+	else
+	{
+		NxDbgMsg(NX_DBG_INFO, "==> Enable Chip[%d:%d] : %02x%02x%02x%02x ~ %02x%02x%02x%02x\n",
+				chipId, handle->numCores[chipId - 1] - btc08_info->chip_disCores[chipId],
+				start_small_nonce[0], start_small_nonce[1], start_small_nonce[2], start_small_nonce[3],
+				end_small_nonce[0],end_small_nonce[1], end_small_nonce[2], end_small_nonce[3]);
+		Btc08WriteNonce(handle, chipId, start_small_nonce, end_small_nonce);
+	}
+
+	// Step 8. Run Job (Only N chip)
+	for(int i = 0; i < 2; i++)
+	{
+		NxDbgMsg(NX_DBG_INFO, "  Run jobId#%d --> chip#%d\n", btc08_info->jobId, chipId);
+		Btc08RunJob(handle, chipId, (handle->isAsicBoost ? ASIC_BOOST_EN : 0x00), btc08_info->jobId++);
+	}
+	
+	pthread_mutex_unlock(&btc08_info->lock);
+
+	return 0;
+}
+
+/**
+ * @brief pthread function
+ * @date 2022.08.11
+ * @author dnjsdlf5400@coasia.com
+ * 
+ * @param arg struct BTC08_INFO
+ */
+static void *TestWorkLoop_EnableChip(void *arg)
+{
+	struct BTC08_INFO *btc08_info = ((struct BTC08_INFO*)arg);
+	BTC08_HANDLE handle = btc08_info->handle;
+	struct timespec ts_start, ts_end, ts_diff;
+
+	uint8_t chipId = 0x00;
+	uint8_t oon_irq = 0x00, gn_irq = 0x00, oon_job_id = 0x00, gn_job_id = 0x00;
+	uint8_t res[4] = {0x00,};
+	uint8_t disable_cores[32] = {0x00,};
+	unsigned int res_size = sizeof(res)/sizeof(res[0]);
+
+	// Step 1. Initialize BTC08_INFO
+	if(InitBTC08_INFO(btc08_info) != 0)
+	{
+		NxDbgMsg(NX_DBG_INFO, "Error : Can not initialize BTC08_INFO\n");
+		goto ERROR_RUN;
+	}
+
+	// Step 2. Set BTC08_INFO
+	if(SetBTC08_INFO(btc08_info) != 0)
+	{
+		NxDbgMsg(NX_DBG_INFO, "Error : chip#%d is already used\n", btc08_info->chipId);
+		goto ERROR_RUN;
+	}
+
+	DbgGpioOn();
+
+	// Step 3. Check GN or OON Interrupt
+	tstimer_time(&ts_start);
+	while(!btc08_info->isDone)
+	{
+		if(0 == Btc08GpioGetValue(handle, GPIO_TYPE_GN)) // Check GN GPIO pin
+		{
+			for(int i = 0; i < handle->numChips; i++) // Check all of active chips
+			{
+				if(btc08_info->chip_enable[i + 1]) // if enable chip
+				{
+					pthread_mutex_lock(&btc08_info->lock);
+					Btc08ReadJobId(handle, i + 1, res, res_size);
+					gn_job_id  = res[1];
+					gn_irq 	   = res[2] & (1<<0);
+					chipId     = res[3];
+
+					if (0 != gn_irq) // if gn_irq is occurs
+					{
+						if(!btc08_info->chip_isdone[i + 1])
+						{
+							btc08_info->chip_isdone[i + 1] = true;
+
+							NxDbgMsg(NX_DBG_INFO, "GN : chip#%d for jobId#%d\n", i + 1, gn_job_id);
+							btc08_info->numGN++;
+
+							if (handleGN(handle, i + 1, golden_nonce) < 0)
+							{
+								NxDbgMsg(NX_DBG_INFO, "=== GN Read fail [chip#%d for jobId#%d]\n", i + 1, gn_job_id);
+								btc08_info->isDone = true;
+								pthread_mutex_unlock(&btc08_info->lock);
+								singlecommand_command_list3();
+								goto ERROR_RUN;
+							}
+						}
+					}
+					else // If GN IRQ is not set, then go to check OON
+					{				
+						NxDbgMsg(NX_DBG_DEBUG, "=== H/W GN occured but GN_IRQ value is not set\n");
+					}
+					pthread_mutex_unlock(&btc08_info->lock);
+				}
+			}
+		}
+		if (0 == Btc08GpioGetValue(handle, GPIO_TYPE_OON))	// Check OON GPIO pin
+		{
+			for (int i = 0; i < handle->numChips; i++)
+			{
+				if(btc08_info->chip_enable[i + 1]) // if enable chip
+				{
+					pthread_mutex_lock(&btc08_info->lock);
+					Btc08ReadJobId(handle,  i + 1, res, res_size);
+					oon_job_id = res[0];
+					oon_irq	  = res[2] & (1<<1);
+					chipId    = res[3];
+
+					if (0 != oon_irq) // if oon_irq is occurs
+					{
+						if(!btc08_info->chip_isdone[i + 1]) // if gn_irq is not occurs
+						{
+							NxDbgMsg(NX_DBG_INFO, "OON : chip#%d for jobId#%d\n", i + 1, oon_job_id);
+							btc08_info->numOON++;
+						}
+
+						if(handleOON(handle, i + 1) == 0)
+						{
+							btc08_info->chip_isdone[i + 1] = false;
+							NxDbgMsg(NX_DBG_INFO, "  Run jobId#%d --> chip#%d\n", btc08_info->jobId, i + 1);
+							Btc08RunJob(handle, i + 1, (handle->isAsicBoost ? ASIC_BOOST_EN : 0x00), btc08_info->jobId++);
+							btc08_info->jobId = btc08_info->jobId >= MAX_JOB_ID ? 0 : btc08_info->jobId;
+						}
+					}
+					pthread_mutex_unlock(&btc08_info->lock);
+				}
+			}
+		}
+		sched_yield();
+	}
+
+ERROR_RUN:
+	DbgGpioOff();
+	DestroyBtc08(handle);
+	tstimer_time(&ts_end);
+	tstimer_diff(&ts_end, &ts_start, &ts_diff);
+	NxDbgMsg(NX_DBG_INFO, "\n=========================\n");
+	NxDbgMsg(NX_DBG_INFO, "GN    : %d\n", btc08_info->numGN);
+	NxDbgMsg(NX_DBG_INFO, "OON   : %d\n", btc08_info->numOON);
+	NxDbgMsg(NX_DBG_INFO, "Total : %d\n", btc08_info->numGN + btc08_info->numOON);
+	NxDbgMsg(NX_DBG_INFO, "-------------------------\n");
+	calc_hashrate(handle->isAsicBoost, btc08_info->numGN + btc08_info->numOON, &ts_diff);
+	NxDbgMsg(NX_DBG_INFO, "=========================\n\n");
+}
+
 void SingleCommandLoop(void)
 {
 	static char cmdStr[NX_SHELL_MAX_ARG * NX_SHELL_MAX_STR];
@@ -2335,7 +2691,7 @@ void SingleCommandLoop_freq(uint8_t disCore, uint8_t isFullNonce, uint8_t isDiff
 				pthread_mutex_lock(&btc08_info->lock);
 				btc08_info->isDone = true;
 				pthread_mutex_unlock(&btc08_info->lock);
-				pthread_join(btc08_info->hThread, (void**)&ret);
+				pthread_join(btc08_info->pThread, (void**)&ret);
 				free(btc08_info);
 				btc08_info = NULL;
 			}
@@ -2365,7 +2721,7 @@ FIRST_START:
 					btc08_info->is_full_nonce = isFullNonce;
 					btc08_info->pll_freq = freqM;
 					btc08_info->is_diff_range = isDiffRange;
-					if(pthread_create(&btc08_info->hThread, NULL, TestWorkLoop_freq, (void*)btc08_info) != 0)
+					if(pthread_create(&btc08_info->pThread, NULL, TestWorkLoop_freq, (void*)btc08_info) != 0)
 					{
 						printf("hthread error\n");
 					}
@@ -2385,7 +2741,7 @@ FIRST_START:
 				pthread_mutex_lock(&btc08_info->lock);
 				btc08_info->isDone = true;
 				pthread_mutex_unlock(&btc08_info->lock);
-				pthread_join(btc08_info->hThread, (void**)&ret);
+				pthread_join(btc08_info->pThread, (void**)&ret);
 				free(btc08_info);
 				btc08_info = NULL;
 			}
@@ -2413,6 +2769,228 @@ FIRST_START:
 		else{
 			printf("unknown command : %s \n", cmd[0]);
 			singlecommand_command_list2();
+		}
+	}
+}
+
+void SingleCommandLoop_EnableChip(int freqM)
+{
+	static char cmdStr[NX_SHELL_MAX_ARG * NX_SHELL_MAX_STR];
+	static char cmd[NX_SHELL_MAX_ARG][NX_SHELL_MAX_STR];
+	int cmdCnt;
+	int ret;
+
+	struct BTC08_INFO *btc08_info = NULL;
+	uint8_t chipId = 0;
+	uint8_t disCore = 255;
+	uint8_t isFullNonce = 255;
+	uint8_t idx_data = 255;
+
+	singlecommand_command_list3();
+
+	for( ;; )
+	{
+		fgets( cmdStr, NX_SHELL_MAX_ARG*NX_SHELL_MAX_STR - 1, stdin );
+		cmdCnt = Shell_GetArgument( cmdStr, cmd );
+
+		//----------------------------------------------------------------------
+		if( !strcasecmp(cmd[0], "start") )
+		{
+			// Step 1. Check Input Data (chipId, disCore, isFullNonce, idx_data)
+			chipId = (uint8_t)atoi(cmd[1]);
+			disCore = (uint8_t)atoi(cmd[2]);
+			isFullNonce = (uint8_t)atoi(cmd[3]);
+			idx_data = (uint8_t)atoi(cmd[4]);
+
+			if(chipId < 1 || chipId >= MAX_CHIPS)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong chipId\n");
+				singlecommand_command_list3();
+				continue;
+			}
+			if(disCore < 0 || disCore >= BTC08_NUM_CORES)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong DisCore\n");
+				singlecommand_command_list3();
+				continue;
+			}
+			if(isFullNonce != 0 && isFullNonce != 1)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong isFullNonce\n");
+				singlecommand_command_list3();
+				continue;
+			}
+			if(idx_data < 0 || idx_data >= MAX_JOB_INDEX)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong idx_data\n");
+				singlecommand_command_list3();
+				continue;
+			}
+			if(btc08_info)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : already started\n");
+				singlecommand_command_list3();
+				continue;
+			}
+
+			// Step 2. Create BTC08_INFO
+			btc08_info = (struct BTC08_INFO *)calloc( sizeof(struct BTC08_INFO), 1 );
+
+			if(!btc08_info)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Can not create BTC08_INFO\n");
+				singlecommand_command_list3();
+				continue;
+			}
+
+#if USE_BTC08_FPGA
+				btc08_info->handle = CreateBtc08(0);
+#else
+				if ((plug_status_0 == 1) && (plug_status_1 != 1))
+					btc08_info->handle = CreateBtc08(0);
+				else if ((plug_status_0 != 1) && (plug_status_1 == 1))
+					btc08_info->handle = CreateBtc08(1);
+#endif
+
+			btc08_info->chipId = chipId;
+			btc08_info->disable_core_num = disCore;
+			btc08_info->is_full_nonce = isFullNonce;
+			btc08_info->pll_freq = freqM;
+			btc08_info->idx_data = idx_data;
+			btc08_info->isDone = false;
+
+			// Step 3. Mutex init 
+			pthread_mutex_init(&btc08_info->lock, NULL);
+
+			// Step 4. Create thread
+			if(pthread_create(&btc08_info->pThread, NULL, TestWorkLoop_EnableChip, (void*)btc08_info))
+			{
+				printf("Error : Can not create pthread\n");
+				free(btc08_info);
+				singlecommand_command_list3();
+			}
+		}
+		else if( !strcasecmp(cmd[0], "stop") )
+		{
+			if(btc08_info)
+			{
+				// Step 1. Set "isDone" to 1
+				pthread_mutex_lock(&btc08_info->lock);
+				btc08_info->isDone = true;
+				pthread_mutex_unlock(&btc08_info->lock);
+
+				// Step 2. Wait thread finish
+				pthread_join(btc08_info->pThread, (void**)&ret);
+
+				// Step 3. free BTC08_INFO
+				free(btc08_info);
+				btc08_info = NULL;
+			}
+			break;
+		}
+		else if( !strcasecmp(cmd[0], "enable") )
+		{
+			// Step 1. Check Input Data (chipId, disCore, isFullNonce, idx_data)
+			chipId = (uint8_t)atoi(cmd[1]);
+			disCore = (uint8_t)atoi(cmd[2]);
+			isFullNonce = (uint8_t)atoi(cmd[3]);
+			idx_data = (uint8_t)atoi(cmd[4]);
+
+			if(chipId < 1 || chipId >= MAX_CHIPS)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong chipId\n");
+				singlecommand_command_list3();
+				continue;
+			}
+			if(disCore < 0 || disCore >= BTC08_NUM_CORES)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong DisCore\n");
+				singlecommand_command_list3();
+				continue;
+			}
+			if(isFullNonce != 0 && isFullNonce != 1)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong isFullNonce\n");
+				singlecommand_command_list3();
+				continue;
+			}
+			if(idx_data < 0 || idx_data >= MAX_JOB_INDEX)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong idx_data\n");
+				singlecommand_command_list3();
+				continue;
+			}
+			if(!btc08_info)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Not started\n");
+				singlecommand_command_list3();
+				continue;
+			}
+
+			// Step 2. Set BTC08_INFO
+			btc08_info->chipId = chipId;
+			btc08_info->disable_core_num = disCore;
+			btc08_info->is_full_nonce = isFullNonce;
+			btc08_info->idx_data = idx_data;
+			if(SetBTC08_INFO(btc08_info) != 0)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : chip#%d is already used\n", btc08_info->chipId);
+			}
+		}
+		else if( !strcasecmp(cmd[0], "disable") )
+		{
+			// Step 1. Check Input Data (chipId)
+			chipId = (uint8_t)atoi(cmd[1]);
+			bool isAllDisable = true;
+
+			if(chipId < 1 || chipId >= MAX_CHIPS)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong chipId\n");
+				continue;
+			}
+			if(!btc08_info)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Not started\n");
+				continue;
+			}
+
+			// Step 2. Disable Selected chip
+			pthread_mutex_lock(&btc08_info->lock);
+			if(btc08_info->chip_enable[chipId])
+			{
+				btc08_info->chip_enable[chipId] = false;
+				btc08_info->chip_isdone[chipId] = true;
+				NxDbgMsg(NX_DBG_INFO, "    Disable chip#%d for jobId#%d\n", chipId, btc08_info->jobId++);
+			}
+			else
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : chip#%d is not used\n", chipId);
+			}
+			pthread_mutex_unlock(&btc08_info->lock);
+
+			for(int i = 0; i < MAX_CHIPS; i++)
+			{
+				if(btc08_info->chip_enable[i])
+				{
+					isAllDisable = false;
+					break;
+				}
+			}
+			if(isAllDisable)
+			{
+				singlecommand_command_list3();
+			}
+		}
+		else if(!strcasecmp(cmd[0], "help"))
+		{
+			singlecommand_command_list3();
+		}
+		else{
+			printf("unknown command : %s \n", cmd[0]);
+			if(btc08_info->isDone)
+			{
+				singlecommand_command_list3();
+			}
 		}
 	}
 }

@@ -140,6 +140,8 @@ void print_usage( char *appname )
 	printf(" btc08_test -m 8 -n 1 -c 0 -D 0 -f 24\n");
 	printf("example 8) Change Frequency Mode\n");
 	printf(" btc08_test -m 9 -n 1 -c 0 -R 0 -f 24\n");
+	printf("example 9) Only 1chip enable Mode\n");
+	printf(" btc08_test -m 10 -f 24\n");
 	printf("------------------------------------------------------------------\n");
 }
 
@@ -276,13 +278,18 @@ int main( int argc, char *argv[] )
 			DebugPowerBIST(freqM, interval);
 			break;
 		}
-
 		case 7:
 		{
-			MiningWithoutBist( freqM, isInfiniteMining );
+			printf("====== Mining Test Mode (No Bist) ======\n");
+			printf("  Disable Core    : %d ea\n", disCore);
+			printf("  Freqeyncy       : %dMHz\n", freqM );
+			printf("  Nonce           : %s\n",  isFullNonce?"Full":"Short");
+			printf("  Disable Mask    : 0x%08x\n", gDisableCore);
+			printf("  Infinite Mining : %d\n", isInfiniteMining);
+			printf("======================================\n");
+			MiningWithoutBist( disCore, freqM, isFullNonce, 0, isInfiniteMining );
 			break;
 		}
-
 		// Different ASIC Data Test
 		case 8:
 		{
@@ -298,13 +305,16 @@ int main( int argc, char *argv[] )
 			TestAsic(last_chipId, disCore, isFullNonce, is_diff_data, freqM);
 			break;
 		}
-
 		case 9:
 		{
 			SingleCommandLoop_freq(disCore, isFullNonce, is_diff_range, freqM);
 			break;
 		}
-
+		case 10:
+		{
+			SingleCommandLoop_EnableChip(freqM);
+			break;
+		}
 		default :
 			for( ;; )
 			{

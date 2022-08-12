@@ -18,5 +18,6 @@ void TestAsic(uint8_t last_chipId, uint8_t disable_core_num, uint8_t is_full_non
 extern unsigned int gDisableCore;
 
 void SingleCommandLoop_freq(uint8_t disCore, uint8_t isFullNonce, uint8_t isDiffRange, int32_t freqM);
+void SingleCommandLoop_EnableChip(int freqM);
 
 #endif // _SINGLECOMMAND_H_
