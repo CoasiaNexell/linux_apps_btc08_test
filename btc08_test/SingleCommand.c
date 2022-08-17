@@ -84,11 +84,13 @@ static void singlecommand_command_list3()
 	printf("\n");
 	printf("===================== Enable Chip Test Command =====================\n");
 	printf("  start <chipId> <disCore> <isFullNonce> <idx_data>  : Start\n");
+	printf("  start2 <delay>                                     : Sequential Start\n");
 	printf("  enable <chipId> <disCore> <isFullNonce> <idx_data> : Enable chip\n");
 	printf("  disable <chipId>                                   : Disable chip\n");
 	printf("  stop                                               : quit\n");
 	printf("--------------------------------------------------------------------\n");
 	printf("  ex) start 1 0 0 4\n");
+	printf("  ex) start2 10\n");
 	printf("  ex) enable 3 0 0 6\n");
 	printf("  ex) disable 1\n");
 	printf("====================================================================\n");
@@ -2336,10 +2338,29 @@ static void *TestWorkLoop_EnableChip(void *arg)
 	}
 
 	// Step 2. Set BTC08_INFO
-	if(SetBTC08_INFO(btc08_info) != 0)
+	if(btc08_info->delay == -1)
 	{
-		NxDbgMsg(NX_DBG_INFO, "Error : chip#%d is already used\n", btc08_info->chipId);
-		goto ERROR_RUN;
+		if(SetBTC08_INFO(btc08_info) != 0)
+		{
+			NxDbgMsg(NX_DBG_INFO, "Error : chip#%d is already used\n", btc08_info->chipId);
+			goto ERROR_RUN;
+		}
+	}
+	else
+	{
+		for(int i = 0; i < btc08_info->numChips; i++)
+		{
+			btc08_info->chipId = i + 1;
+			btc08_info->disable_core_num = 0;
+			btc08_info->is_full_nonce = 1;
+			btc08_info->idx_data = 4;
+			if(SetBTC08_INFO(btc08_info) != 0)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : chip#%d is already used\n", btc08_info->chipId);
+				goto ERROR_RUN;
+			}
+			usleep(btc08_info->delay * 1000);
+		}
 	}
 
 	DbgGpioOn();
@@ -2785,6 +2806,7 @@ void SingleCommandLoop_EnableChip(int freqM)
 	uint8_t disCore = 255;
 	uint8_t isFullNonce = 255;
 	uint8_t idx_data = 255;
+	int delay;
 
 	singlecommand_command_list3();
 
@@ -2857,6 +2879,53 @@ void SingleCommandLoop_EnableChip(int freqM)
 			btc08_info->is_full_nonce = isFullNonce;
 			btc08_info->pll_freq = freqM;
 			btc08_info->idx_data = idx_data;
+			btc08_info->delay = -1;
+			btc08_info->isDone = false;
+
+			// Step 3. Mutex init 
+			pthread_mutex_init(&btc08_info->lock, NULL);
+
+			// Step 4. Create thread
+			if(pthread_create(&btc08_info->pThread, NULL, TestWorkLoop_EnableChip, (void*)btc08_info))
+			{
+				printf("Error : Can not create pthread\n");
+				free(btc08_info);
+				singlecommand_command_list3();
+			}
+		}
+		else if( !strcasecmp(cmd[0], "start2") )
+		{
+			// Step 1. Check Input Data (delay)
+			delay = atoi(cmd[1]);
+
+			if(delay < 0)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Input wrong chipId\n");
+				singlecommand_command_list3();
+				continue;
+			}
+
+			// Step 2. Create BTC08_INFO
+			btc08_info = (struct BTC08_INFO *)calloc( sizeof(struct BTC08_INFO), 1 );
+
+			if(!btc08_info)
+			{
+				NxDbgMsg(NX_DBG_INFO, "Error : Can not create BTC08_INFO\n");
+				singlecommand_command_list3();
+				continue;
+			}
+
+#if USE_BTC08_FPGA
+				btc08_info->handle = CreateBtc08(0);
+#else
+				if ((plug_status_0 == 1) && (plug_status_1 != 1))
+					btc08_info->handle = CreateBtc08(0);
+				else if ((plug_status_0 != 1) && (plug_status_1 == 1))
+					btc08_info->handle = CreateBtc08(1);
+#endif
+
+			btc08_info->pll_freq = freqM;
+			btc08_info->delay = delay;
 			btc08_info->isDone = false;
 
 			// Step 3. Mutex init 

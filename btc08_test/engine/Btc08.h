@@ -100,6 +100,7 @@ struct BTC08_INFO {
 	uint8_t chipId;
 	uint8_t idx_data;
 	int pll_freq;
+	int delay;
 
 	uint8_t jobId;
 	uint8_t numChips;
