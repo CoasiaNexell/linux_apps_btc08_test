@@ -100,14 +100,13 @@ struct BTC08_INFO {
 	uint8_t chipId;
 	uint8_t idx_data;
 	int pll_freq;
+	int delay;
 
 	uint8_t jobId;
 	uint8_t numChips;
 	bool chip_enable[MAX_CHIPS];
 	bool chip_isdone[MAX_CHIPS];
-	uint8_t chip_isFullNonce[MAX_CHIPS];
-	uint8_t chip_disCores[MAX_CHIPS];
-	VECTOR_DATA chip_data[MAX_CHIPS];
+	VECTOR_DATA chip_data;
 
 	bool isDone;
 	uint32_t numGN;
