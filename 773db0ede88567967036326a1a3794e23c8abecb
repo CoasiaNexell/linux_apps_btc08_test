@@ -1,0 +1,50 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f26921d9_6caeda76",
+        "filename": "btc08_test/SingleCommand.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 2805,
+      "author": {
+        "id": 1000001
+      },
+      "writtenOn": "2022-08-24T07:11:38Z",
+      "side": 1,
+      "message": "초기값 지정을 하는게 났지 않을까요?",
+      "range": {
+        "startLine": 2805,
+        "startChar": 5,
+        "endLine": 2805,
+        "endChar": 10
+      },
+      "revId": "773db0ede88567967036326a1a3794e23c8abecb",
+      "serverId": "f3c90331-7953-4206-aadc-b7348badd027",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "e4ecb40e_4c9f60c2",
+        "filename": "btc08_test/engine/Btc08.h",
+        "patchSetId": 2
+      },
+      "lineNbr": 103,
+      "author": {
+        "id": 1000001
+      },
+      "writtenOn": "2022-08-24T07:11:38Z",
+      "side": 1,
+      "message": "delay를  unsigned int대신 int로 하는 이유가 있나요?  음수 값을 사용하는 경우가 있나요?",
+      "range": {
+        "startLine": 103,
+        "startChar": 5,
+        "endLine": 103,
+        "endChar": 10
+      },
+      "revId": "773db0ede88567967036326a1a3794e23c8abecb",
+      "serverId": "f3c90331-7953-4206-aadc-b7348badd027",
+      "unresolved": true
+    }
+  ]
+}
